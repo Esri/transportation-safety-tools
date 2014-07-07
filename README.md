@@ -1,4 +1,4 @@
-#trans-safety
+#transportation-safety-tools
 Transportation Safety segmentation and crash analysis tools  leverage the core ArcGIS Platform to help organizations analyze crash analysis locations from authoritative sources in a simple and sustainable way and leverage this information in many workflows. 
 
 This GitHub repository houses the crash analysis toolset used to analyze and segement the roads.
@@ -55,7 +55,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 A copy of the license is available in the repository's
-[LICENSE.txt](https://github.com/Esri/trans-safety/blob/master/License.txt) file.
+[LICENSE.txt](https://github.com/Esri/transportation-safety-tools/blob/master/License.txt) file.
 
 [](Esri Tags: Python State-Government Government)
 [](Esri Language: Python)
