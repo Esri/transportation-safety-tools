@@ -1,4 +1,15 @@
-""" Basic segmentation tool script """
+"""
+#-------------------------------------------------------------------------------
+# Name:        BasicSegmentation.py
+# Purpose:     This tool is used to prepare the baseline routes dataset with
+#              all necessary attributes (route name, route type, county,
+#              access control, medians, travel lanes, area type, speed limit
+#              and AADT.
+#
+# Author:      CyberTech Systems and Software Ltd.
+#
+#-------------------------------------------------------------------------------
+"""
 # pylint: disable = C0103, R0912, R0914, R0915, E1103, W0703, W0612, E1101
 # required imports
 import arcpy
@@ -57,26 +68,27 @@ def get_workspace(feature_class):
 
 def get_domain_values(workspace, domain_name):
     """ takes gdb and domain name as input and return domain value dictinary """
-    return [domain.codedValues for domain in arcpy.da.ListDomains(workspace)
-                                            if domain.name == domain_name][0]
+    return (domain.codedValues for domain in arcpy.da.ListDomains(workspace)
+            if domain.name == domain_name).next()
 
 def get_field_values(feature_class, field_name):
     """ takes feature class and field object as input
         and return unique field values list """
     return sorted(set(row[0] for row in arcpy.da.SearchCursor(feature_class,
-                                                                [field_name])))
+                                                              [field_name])))
 
 def get_field_object(feature_class, field_name):
     """ takes feature class and field name as input and
         return field object for the given field name"""
-    return [field for field in arcpy.Describe(feature_class).fields
-                                            if field.name == field_name][0]
+    return (field for field in arcpy.Describe(feature_class).fields
+            if field.name == field_name).next()
 
 def disable_m_value(feature_class):
     """ Disable M value of feature class """
     arcpy.env.outputMFlag = 'Disabled'
+    fc_name = os.path.basename(str(feature_class))
     return arcpy.FeatureClassToFeatureClass_conversion(feature_class, IN_MEMORY,
-                            os.path.basename(str(feature_class)))
+                                                       fc_name)
 
 def create_where_clause(field, route_types, lookup=None):
     """ create where clause """
@@ -118,13 +130,13 @@ def identity(target_ftrs, identity_ftrs, output_name=None, output_folder=None):
         out_ftrs = check_name_length(out_ftrs)
         # identity operation to combine attributes
         result = arcpy.Identity_analysis(target_ftrs, identity_ftrs, out_ftrs,
-                                            "NO_FID")[0]
+                                         "NO_FID")[0]
         feature_name = check_name_length("sp" + os.path.basename(str(result)))
         if output_name:
             feature_name = output_name
         # convert multiparts to single part, if any
-        result_singlepart = arcpy.MultipartToSinglepart_management(result,
-                                os.path.join(output_location, feature_name))
+        path = os.path.join(output_location, feature_name)
+        result_singlepart = arcpy.MultipartToSinglepart_management(result, path)
         arcpy.Delete_management(result)
         return result_singlepart
     except Exception as e:
@@ -133,9 +145,7 @@ def identity(target_ftrs, identity_ftrs, output_name=None, output_folder=None):
 def calculate_average(feature_class, existing_fields, new_field):
     """ calculate the average of AADT fields for fields that have
         valid value """
-##    msg = "Calculating average AADT for each segment"
-##    arcpy.SetProgressorLabel(msg)
-##    arcpy.AddMessage(msg)
+
     arcpy.AddField_management(feature_class, new_field, 'DOUBLE',
                               field_alias=new_field)
     fields = list(existing_fields)
@@ -152,7 +162,6 @@ def calculate_average(feature_class, existing_fields, new_field):
             except (ValueError, ZeroDivisionError):
                 row[-1] = None
             cursor.updateRow(row)
-##    arcpy.SetProgressorPosition()
     return feature_class
 
 def copy_fields(feature_class, fields_name_info, fc_source):
@@ -193,7 +202,7 @@ def copy_fields(feature_class, fields_name_info, fc_source):
         arcpy.AddError(str(error))
 
 def combine_attributes(fc_target, fc_identity, fc_identity_field_name,
-                        new_field_name, output_name=None, output_folder=None):
+                       new_field_name, output_name=None, output_folder=None):
     """ combines the required fields from other feature classes with
         baseline feature class """
     try:
@@ -206,20 +215,15 @@ def combine_attributes(fc_target, fc_identity, fc_identity_field_name,
         # keep required fields in list to find newly added fields after identity
         # operation
         fc_target_fields = [field.name.lower() for field in
-                                    arcpy.Describe(fc_target).fields]
+                            arcpy.Describe(fc_target).fields]
         # identity analysis to combine attributes of identity feature class
         # into baseline
-##        fc_name = os.path.basename(str(fc_identity))
 
-##        arcpy.SetProgressorLabel("Combining {0} into baseline".format(fc_name))
-##        arcpy.AddMessage("Combining {0} into baseline".format(fc_name))
         baseline_routes = identity(fc_target, fc_identity,
-                                    output_name, output_folder)
+                                   output_name, output_folder)
         # get list of fields in identity feature class, except the selected
         # field these fields are not required to be carried over
-##        if type(fc_identity_field_name) is unicode:
-##            fc_identity_field_name = [fc_identity_field_name]
-##
+
         fc_identity_fields = []
         for field in arcpy.Describe(fc_identity).fields:
             if field.name != fc_identity_field_name and \
@@ -234,16 +238,15 @@ def combine_attributes(fc_target, fc_identity, fc_identity_field_name,
         # find the fields newly added in baseline feature class after identity
         # operation
         baseline_route_fields = [field.name for field in
-                                    arcpy.Describe(baseline_routes).fields
-                                    if field.name.lower() not in
-                                    fc_target_fields and not field.required]
+                                 arcpy.Describe(baseline_routes).fields
+                                 if field.name.lower() not in
+                                 fc_target_fields and not field.required]
         # copy existing feild rows into a new field added in
         # baseline feature class
         field_dict = {baseline_route_fields[0]: new_field_name}
         baseline_routes = copy_fields(baseline_routes, field_dict, fc_source)
         # delete the previous field from which rows has beed copied to new field
         arcpy.DeleteField_management(baseline_routes, baseline_route_fields)
-##        arcpy.SetProgressorPosition()
         return baseline_routes
     except Exception as e:
         arcpy.AddError(str(e))
@@ -251,15 +254,13 @@ def combine_attributes(fc_target, fc_identity, fc_identity_field_name,
 def identify_usrap_segment(feature_class, roadway_types):
     """ create new field 'USRAP_SEGMENT' and assign 'YES' or 'NO' value
         according to roadway type """
-##    msg = "Identifying USRAP segments"
-##    arcpy.SetProgressorLabel(msg)
-##    arcpy.AddMessage(msg)
+
     # field name for USRAP segments
     fields = list(set([k for d in roadway_types for k in d.keys()]))
     fields.append(USRAP_SEGMENT)
     # create new field to identify USRAP Segments
     arcpy.AddField_management(feature_class, USRAP_SEGMENT, 'TEXT',
-                                field_length=3, field_alias=USRAP_SEGMENT)
+                              field_length=3, field_alias=USRAP_SEGMENT)
     # take a segment to from baseline route feature class
     with arcpy.da.UpdateCursor(feature_class, fields) as cursor:
         for row in cursor:
@@ -275,7 +276,7 @@ def identify_usrap_segment(feature_class, roadway_types):
                         # check for access control
                         if field == USRAP_ACCESS_CONTROL:
                             truth_table.append(row[fields.index(field)] in
-                                                            roadway_type[field])
+                                               roadway_type[field])
                         # check for lanes
                         elif field == USRAP_LANES:
                             try:
@@ -306,7 +307,6 @@ def identify_usrap_segment(feature_class, roadway_types):
                 # roadway type condition
                 row[fields.index(USRAP_SEGMENT)] = 'NO'
                 cursor.updateRow(row)
-##    arcpy.SetProgressorPosition()
     return feature_class
 
 def merge_segments(update_row, update_cursor, fields, feature_class, condition):
@@ -358,15 +358,15 @@ def merge_segments(update_row, update_cursor, fields, feature_class, condition):
                             else:
                                 # calculate weighted average
                                 weighted_avrg = (((pre_val*update_row_length) +
-                                                 (cur_val*current_row_length)) /
-                                                 (update_row_length+
+                                                  (cur_val*current_row_length))/
+                                                 (update_row_length +
                                                   current_row_length))
                                 weighted_avrg = round(weighted_avrg, 1)
                             avg_aadt.append(weighted_avrg)
                             continue
                         else:
-                            truth_table.append(float(pre_val) <= tup[2]
-                                             and float(cur_val) <= tup[2])
+                            truth_table.append(float(pre_val) <= tup[2] and
+                                               float(cur_val) <= tup[2])
                     # check for 'LESS_THAN_EQUAL_TO_OR_MORE_THAN_EQUAL_TO'
                     # condition
                     elif tup[1] == LESS_THAN_EQUAL_TO_OR_MORE_THAN_EQUAL_TO:
@@ -377,7 +377,7 @@ def merge_segments(update_row, update_cursor, fields, feature_class, condition):
                     # check for 'MORE_THAN_EQUAL_TO' condition
                     elif tup[1] == MORE_THAN_EQUAL_TO:
                         truth_table.append(float(pre_val >= tup[2] and
-                                           float(cur_val) >= tup[2]))
+                                                 float(cur_val) >= tup[2]))
 
                 # proceed to merge geometry when all conditions are satisfied
                 if not False in truth_table:
@@ -389,7 +389,7 @@ def merge_segments(update_row, update_cursor, fields, feature_class, condition):
                         global DELETE_OIDS
                         DELETE_OIDS.append(current[0])
                     except ValueError:
-                        msg = "Merge failed for ObjectId {0} and {1}".format(
+                        msg = "Merge failed for ObjectId {0} and {1}".format(\
                                 update_row[0], current[0])
                         arcpy.AddMessage(msg)
             # delete the redundant records which are merged with others
@@ -429,6 +429,17 @@ def add_segids(feature_class, field_name):
 def main():
     """ main function """
     # Basic segmentation tool's inputs (arranged in accending order)
+    # Access Control domain description
+    value_access_control_full = "Full Access Control"
+    value_access_control_partial = "Partial Access Control"
+    value_access_control_no = "No Access Control"
+    # Median domain description
+    value_median_divided = "Divided Roadway"
+    value_median_undivided = "Undivided Roadway"
+    # AreaType domain description
+    value_area_type_urban = "Urban"
+    value_area_type_rural = "Rural"
+
     ftrclass_route = arcpy.GetParameterAsText(0)
     field_route_name = arcpy.GetParameterAsText(1)
     field_route_type = arcpy.GetParameterAsText(2)
@@ -437,6 +448,7 @@ def main():
     field_county_name = arcpy.GetParameterAsText(5)
     ftrclass_access_control = arcpy.GetParameterAsText(6)
     field_access_control_info = arcpy.GetParameterAsText(7)
+
     workspace = get_workspace(ftrclass_access_control)
     field = get_field_object(ftrclass_access_control, field_access_control_info)
     dom_code = get_domain_values(workspace, field.domain)
@@ -445,23 +457,23 @@ def main():
         msg = "Domain to denote Access Controls must contain three coded values"
         raise arcpy.ExecuteError(msg)
 
-    value_access_control_full = "Full Access Control"
-    if value_access_control_full not in dom_code.keys():
-        message = "is only accepted to denote full access control"
-        msg = "Domain code '{0}' {1}".format(value_access_control_full, message)
+    if value_access_control_full.lower() not in (des.lower()
+                                                 for des in dom_code.values()):
+        message = "is only accepted for Full Access Control description"
+        msg = "Description: '{0}' {1}".format(value_access_control_full, message)
         raise arcpy.ExecuteError(msg)
 
-    value_access_control_partial = "Partial Access Control"
-    if value_access_control_partial not in dom_code.keys():
-        message = "is only accepted to denote partial access control"
-        msg = "Domain code '{0}' {1}".format(value_access_control_partial,
+    if value_access_control_partial.lower() not in (des.lower() for des in
+                                                    dom_code.values()):
+        message = "is only accepted for Partial Access Control description"
+        msg = "Description: '{0}' {1}".format(value_access_control_partial,
                                              message)
         raise arcpy.ExecuteError(msg)
 
-    value_access_control_no = "No Access Control"
-    if value_access_control_no not in dom_code.keys():
-        message = "is only accepted to denote no access control"
-        msg = "Domain code '{0}' {1}".format(value_access_control_no, message)
+    if value_access_control_no.lower() not in (des.lower()
+                                               for des in dom_code.values()):
+        message = "is only accepted for No Access Control description"
+        msg = "Description: '{0}' {1}".format(value_access_control_no, message)
         raise arcpy.ExecuteError(msg)
 
     ftrclass_median = arcpy.GetParameterAsText(8)
@@ -474,22 +486,23 @@ def main():
         msg = "Domain to denote Medians must contain two coded values"
         raise arcpy.ExecuteError(msg)
 
-    value_median_divided = "Divided Roadway"
-    if value_median_divided not in dom_code.keys():
-        message = "is only accepted to denote divided roadway"
-        msg = "Domain code '{0}' {1}".format(value_median_divided, message)
+    if value_median_divided.lower() not in (des.lower()
+                                            for des in dom_code.values()):
+        message = "is only accepted for Divided Roadway description"
+        msg = "Description: '{0}' {1}".format(value_median_divided, message)
         raise arcpy.ExecuteError(msg)
 
-    value_median_undivided = "Undivided Roadway"
-    if value_median_undivided not in dom_code.keys():
-        message = "is only accepted to denote undivided roadway"
-        msg = "Domain code '{0}' {1}".format(value_median_undivided, message)
+    if value_median_undivided.lower() not in (des.lower()
+                                              for des in dom_code.values()):
+        message = "is only accepted for Undivided Roadway description"
+        msg = "Description: '{0}' {1}".format(value_median_undivided, message)
         raise arcpy.ExecuteError(msg)
 
     ftrclass_travel_lanes = arcpy.GetParameterAsText(10)
     field_travel_lanes_info = arcpy.GetParameterAsText(11)
     ftrclass_area_type = arcpy.GetParameterAsText(12)
     field_area_type_info = arcpy.GetParameterAsText(13)
+
     workspace = get_workspace(ftrclass_area_type)
     field = get_field_object(ftrclass_area_type, field_area_type_info)
     dom_code = get_domain_values(workspace, field.domain)
@@ -498,16 +511,16 @@ def main():
         msg = "Domain to denote Area Type must contain two coded values"
         raise arcpy.ExecuteError(msg)
 
-    value_area_type_urban = "Urban"
-    if value_area_type_urban not in dom_code.keys():
-        message = "is only accepted to denote urban area"
-        msg = "Domain code '{0}' {1}".format(value_area_type_urban, message)
+    if value_area_type_urban.lower() not in (des.lower()
+                                             for des in dom_code.values()):
+        message = "is only accepted for Urban Area description"
+        msg = "Description: '{0}' {1}".format(value_area_type_urban, message)
         raise arcpy.ExecuteError(msg)
 
-    value_area_type_rural = "Rural"
-    if value_area_type_urban not in dom_code.keys():
-        message = "is only accepted to denote rural area"
-        msg = "Domain code '{0}' {1}".format(value_area_type_urban, message)
+    if value_area_type_urban.lower() not in (des.lower()
+                                             for des in dom_code.values()):
+        message = "is only accepted for Rural Area description"
+        msg = "Description: '{0}' {1}".format(value_area_type_urban, message)
         raise arcpy.ExecuteError(msg)
 
     ftrclass_speed_limit = arcpy.GetParameterAsText(14)
@@ -545,8 +558,8 @@ def main():
                 lookup = get_domain_values(workspace, field.domain)
             where = create_where_clause(field, value_route_type, lookup)
                 # use this tool once and create where condition such as
-                # it cover all the selection parms. ##
-            baseline_selected = arcpy.SelectLayerByAttribute_management(
+                # it cover all the selection parms.
+            baseline_selected = arcpy.SelectLayerByAttribute_management(\
                                                             fc_baseline,
                                                             'NEW_SELECTION',
                                                             where)
@@ -565,9 +578,9 @@ def main():
         arcpy.SetProgressorLabel(msg)
         arcpy.AddMessage(msg)
         baseline_selected = combine_attributes(baseline_selected,
-                                                ftrclass_county,
-                                                field_county_name,
-                                                USRAP_COUNTY)
+                                               ftrclass_county,
+                                               field_county_name,
+                                               USRAP_COUNTY)
         arcpy.SetProgressorPosition()
 
         # combine attributes of identity result and access control
@@ -576,9 +589,9 @@ def main():
         arcpy.SetProgressorLabel(msg)
         arcpy.AddMessage(msg)
         baseline_selected = combine_attributes(baseline_selected,
-                                                ftrclass_access_control,
-                                                field_access_control_info,
-                                                USRAP_ACCESS_CONTROL)
+                                               ftrclass_access_control,
+                                               field_access_control_info,
+                                               USRAP_ACCESS_CONTROL)
         arcpy.SetProgressorPosition()
 
         # combine attributes of identity result and medians
@@ -587,9 +600,9 @@ def main():
         arcpy.SetProgressorLabel(msg)
         arcpy.AddMessage(msg)
         baseline_selected = combine_attributes(baseline_selected,
-                                                ftrclass_median,
-                                                field_median_info,
-                                                USRAP_MEDIAN)
+                                               ftrclass_median,
+                                               field_median_info,
+                                               USRAP_MEDIAN)
         arcpy.SetProgressorPosition()
         # combine attributes of identity result and travel lanes
         fc_name = os.path.basename(ftrclass_travel_lanes)
@@ -597,9 +610,9 @@ def main():
         arcpy.SetProgressorLabel(msg)
         arcpy.AddMessage(msg)
         baseline_selected = combine_attributes(baseline_selected,
-                                                ftrclass_travel_lanes,
-                                                field_travel_lanes_info,
-                                                USRAP_LANES)
+                                               ftrclass_travel_lanes,
+                                               field_travel_lanes_info,
+                                               USRAP_LANES)
         arcpy.SetProgressorPosition()
         # combine attributes of identity result and area type
         fc_name = os.path.basename(ftrclass_area_type)
@@ -607,9 +620,9 @@ def main():
         arcpy.SetProgressorLabel(msg)
         arcpy.AddMessage(msg)
         baseline_selected = combine_attributes(baseline_selected,
-                                                ftrclass_area_type,
-                                                field_area_type_info,
-                                                USRAP_AREA_TYPE)
+                                               ftrclass_area_type,
+                                               field_area_type_info,
+                                               USRAP_AREA_TYPE)
         arcpy.SetProgressorPosition()
         # combine attributes of identity result and speed limit
         # and save the usrap segment feature class to gdb
@@ -618,9 +631,9 @@ def main():
         arcpy.SetProgressorLabel(msg)
         arcpy.AddMessage(msg)
         baseline_selected = combine_attributes(baseline_selected,
-                                                ftrclass_speed_limit,
-                                                field_speed_limit_info,
-                                                USRAP_SPEED_LIMIT)
+                                               ftrclass_speed_limit,
+                                               field_speed_limit_info,
+                                               USRAP_SPEED_LIMIT)
         arcpy.SetProgressorPosition()
         if len(ftrclass_aadt_multi_layers) > 0:
             # combine attributes of identity result and AADT
@@ -641,11 +654,11 @@ def main():
                     out_gdb = output_folder
 
                 baseline_selected = combine_attributes(baseline_selected,
-                                                ftr.value,
+                                                       ftr.value,\
                                                 field_aadt_multi_layers_value,
-                                                new_field,
-                                                seg_name,
-                                                out_gdb)
+                                                       new_field,
+                                                       seg_name,
+                                                       out_gdb)
                 arcpy.SetProgressorPosition()
 
             # calculate the average of all supplied years of AADT
@@ -653,8 +666,8 @@ def main():
             arcpy.SetProgressorLabel(msg)
             arcpy.AddMessage(msg)
             baseline_selected = calculate_average(baseline_selected,
-                                                new_fields,
-                                                USRAP_AVG_AADT)
+                                                  new_fields,
+                                                  USRAP_AVG_AADT)
             arcpy.SetProgressorPosition()
         # list of road types on which baseline segments will be
         # identified as usrap segment
@@ -690,7 +703,7 @@ def main():
                          USRAP_LANES: MORE_THAN_2_LANES,
                          USRAP_MEDIAN: value_median_undivided,
                          USRAP_ACCESS_CONTROL: [value_access_control_no,
-                                                 value_access_control_partial]},
+                                                value_access_control_partial]},
                         {USRAP_AREA_TYPE: value_area_type_urban,
                          USRAP_LANES: MORE_THAN_2_LANES,
                          USRAP_MEDIAN: value_median_divided,
@@ -706,13 +719,13 @@ def main():
         arcpy.SetProgressorLabel(msg)
         arcpy.AddMessage(msg)
         baseline_selected = identify_usrap_segment(baseline_selected,
-                                                    roadway_type)
+                                                   roadway_type)
         # delete duplicate records
         fields = [f.name for f in arcpy.ListFields(baseline_selected)
-                    if f.type != "OID"]
+                  if f.type != "OID"]
         baseline_selected = arcpy.DeleteIdentical_management(baseline_selected,
                                                              fields)
-##        arcpy.SetProgressorPosition()
+
         # list of conditions on which two segments will be merged
         # tuple element description:-
         #   first element - field name in usrap route feature class
@@ -762,13 +775,13 @@ def main():
                     continue
                 DELETE_OIDS = []
                 numfeatures = merge_segments(row, update_cursor, fields,
-                                                    layer, condition)
+                                             layer, condition)
                 if len(DELETE_OIDS) > 0:
                     stepper += (len(DELETE_OIDS)*2)
                 else:
                     stepper += 1
                 percent = round(int((stepper/float(max_val))*100))
-                if lower <= percent < 100 :
+                if lower <= percent < 100:
                     arcpy.AddMessage('Merging completed {0}%'.format(lower))
                     lower += 10
                 arcpy.SetProgressorPosition(stepper)
@@ -787,14 +800,11 @@ def main():
         # copy the rest of data when partial road types are selected for
         # analysis
         if fc_baseline:
-##            arcpy.ResetProgressor()
             arcpy.SetProgressorLabel("copying non-usrap segments to output")
-##            arcpy.SetProgressor("step", "copying non-usrap segments to output",
-##                                                                        0, 1, 1)
-            baseline_invert_selected = arcpy.SelectLayerByAttribute_management(
+            baseline_invert_selected = arcpy.SelectLayerByAttribute_management(\
                                                 fc_baseline, 'SWITCH_SELECTION')
             arcpy.Append_management(baseline_invert_selected, baseline_selected,
-                                                                    'NO_TEST')
+                                    'NO_TEST')
         arcpy.SetProgressorPosition()
     except Exception as e:
         arcpy.AddError(str(e))
@@ -806,5 +816,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-
