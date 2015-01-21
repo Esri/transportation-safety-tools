@@ -399,7 +399,8 @@ def merge_segments(update_row, update_cursor, fields, feature_class, condition):
             where = ''
             if len(OID_merged) > 0:
                 merged_oids = map(str, OID_merged)
-                where = 'OBJECTID = ' + ' OR OBJECTID = '.join(merged_oids)
+                field_oid = str(arcpy.Describe(feature_class).OIDFieldName)
+                where = field_oid +' = ' + ' OR {0} = '.format(field_oid).join(merged_oids)
                 arcpy.SelectLayerByAttribute_management(feature_class,
                                                         'NEW_SELECTION',
                                                         where)
