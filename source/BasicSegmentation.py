@@ -517,10 +517,10 @@ def main():
         msg = "Description: '{0}' {1}".format(value_area_type_urban, message)
         raise arcpy.ExecuteError(msg)
 
-    if value_area_type_urban.lower() not in (des.lower()
+    if value_area_type_rural.lower() not in (des.lower()
                                              for des in dom_code.values()):
         message = "is only accepted for Rural Area description"
-        msg = "Description: '{0}' {1}".format(value_area_type_urban, message)
+        msg = "Description: '{0}' {1}".format(value_area_type_rural, message)
         raise arcpy.ExecuteError(msg)
 
     ftrclass_speed_limit = arcpy.GetParameterAsText(14)
