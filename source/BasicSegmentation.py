@@ -243,7 +243,10 @@ def combine_attributes(fc_target, fc_identity, fc_identity_field_name,
                                  fc_target_fields and not field.required]
         # copy existing feild rows into a new field added in
         # baseline feature class
-        field_dict = {baseline_route_fields[0]: new_field_name}
+        # this could be invalid still if fc_target and fc_identity share a 
+        # common field name...fc_identity_field_name...prior to identity operation
+        field_dict = {fc_identity_field_name: new_field_name}
+
         baseline_routes = copy_fields(baseline_routes, field_dict, fc_source)
         # delete the previous field from which rows has beed copied to new field
         arcpy.DeleteField_management(baseline_routes, baseline_route_fields)
