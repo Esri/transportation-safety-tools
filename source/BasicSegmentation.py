@@ -117,6 +117,7 @@ def identity(target_ftrs, identity_ftrs, output_name=None, output_folder=None):
     """ perform identity analysis on target feature class with identity
         feature class """
     try:
+
         output_location = IN_MEMORY
         out_ftrs = os.path.basename(str(identity_ftrs))
         if output_folder:
@@ -124,21 +125,25 @@ def identity(target_ftrs, identity_ftrs, output_name=None, output_folder=None):
             out_ftrs = arcpy.CreateUniqueName(out_ftrs, output_location)
         else:
             out_ftrs = os.path.join(output_location, out_ftrs)
-        # add 'identity' in output feature class name if not present
+
+        # Add 'identity' in output feature class name if not present
         if out_ftrs.find('_identity') == -1:
             out_ftrs += '_identity'
         out_ftrs = check_name_length(out_ftrs)
-        # identity operation to combine attributes
+
+        # Identity operation to combine attributes
         result = arcpy.Identity_analysis(target_ftrs, identity_ftrs, out_ftrs,
                                          "NO_FID")[0]
         feature_name = check_name_length("sp" + os.path.basename(str(result)))
         if output_name:
             feature_name = output_name
-        # convert multiparts to single part, if any
+
+        # Convert multiparts to single part, if any
         path = os.path.join(output_location, feature_name)
         result_singlepart = arcpy.MultipartToSinglepart_management(result, path)
         arcpy.Delete_management(result)
         return result_singlepart
+
     except Exception as e:
         arcpy.AddError(str(e))
 
@@ -206,62 +211,90 @@ def combine_attributes(fc_target, fc_identity, fc_identity_field_name,
     """ combines the required fields from other feature classes with
         baseline feature class """
     try:
+
         if arcpy.Describe(fc_target).hasM:
             fc_target = disable_m_value(fc_target)
+
         # keep the feature class to find domain in copy_fields function
         fc_source = fc_identity
         if arcpy.Describe(fc_identity).hasM:
             fc_identity = disable_m_value(fc_identity)
+            fc_identity_name = os.path.basename(fc_identity[0])
+        else:
+            fc_identity_name = os.path.basename(fc_identity)
+
         # keep required fields in list to find newly added fields after identity
         # operation
-        fc_target_fields = [field.name.lower() for field in
+        fc_target_fields = [field.name for field in
                             arcpy.Describe(fc_target).fields]
-        # identity analysis to combine attributes of identity feature class
-        # into baseline
 
-        baseline_routes = identity(fc_target, fc_identity,
-                                   output_name, output_folder)
-        # get list of fields in identity feature class, except the selected
-        # field these fields are not required to be carried over
-
-        fc_identity_fields = []
-        for field in arcpy.Describe(fc_identity).fields:
-            if field.name != fc_identity_field_name and \
-                    not field.required and \
-                    not field.name.lower().startswith('shape'):
-                fc_identity_fields.append(field.name.lower())
+        #   Make a copy of identity feature class
+        copy_output_name = os.path.join(IN_MEMORY, "_".join([fc_identity_name,
+                                                             "copy"]))
+        fc_identity_copy = arcpy.CopyFeatures_management(fc_identity,
+                                                         copy_output_name)
+        fc_identity_fields = [field.name for field in \
+                              arcpy.Describe(fc_identity_copy).fields \
+                              if field.name != fc_identity_field_name and \
+                              not field.required and \
+                              not field.name.lower().startswith('shape')]
 
         # delete unncessary fields coming from identity feature class
         if len(fc_identity_fields) > 0:
-            arcpy.DeleteField_management(baseline_routes, fc_identity_fields)
+            arcpy.DeleteField_management(fc_identity_copy, fc_identity_fields)
 
-        # find the fields newly added in baseline feature class after identity
+
+        # identity analysis to combine attributes of identity feature class
+        # into baseline
+        baseline_routes = identity(fc_target, fc_identity_copy,
+                                   output_name, output_folder)
+
+        fields_to_delete = []
+        baseline_output_fields = []
+        for field in arcpy.Describe(baseline_routes).fields:
+            if field.name not in fc_target_fields and \
+                    not field.name.startswith(fc_identity_field_name) and \
+                    not field.required:
+                fields_to_delete.append(field.name)
+            else:
+                baseline_output_fields.append(field.name)
+
+        # delete unncessary fields coming from identity feature class
+        if len(fields_to_delete) > 0:
+            arcpy.DeleteField_management(baseline_routes, fields_to_delete)
+
+        # Get the newly added field to baseline routes
+        if fc_identity_field_name in fc_target_fields:
+            baseline_set = set(baseline_output_fields)
+            fc_target_set = set(fc_target_fields)
+            newly_added_field = list(baseline_set - fc_target_set)[0]
+        else:
+            newly_added_field = fc_identity_field_name
+
         # operation
-        baseline_route_fields = [field.name for field in
-                                 arcpy.Describe(baseline_routes).fields
-                                 if field.name.lower() not in
-                                 fc_target_fields and not field.required]
-        # copy existing feild rows into a new field added in
+        # copy existing field rows into a new field added in
         # baseline feature class
-        field_dict = {baseline_route_fields[0]: new_field_name}
+        field_dict = {newly_added_field: new_field_name}
+
         baseline_routes = copy_fields(baseline_routes, field_dict, fc_source)
         # delete the previous field from which rows has beed copied to new field
-        arcpy.DeleteField_management(baseline_routes, baseline_route_fields)
+        arcpy.DeleteField_management(baseline_routes, newly_added_field)
         return baseline_routes
+
     except Exception as e:
         arcpy.AddError(str(e))
 
 def identify_usrap_segment(feature_class, roadway_types):
     """ create new field 'USRAP_SEGMENT' and assign 'YES' or 'NO' value
         according to roadway type """
-
     # field name for USRAP segments
     fields = list(set([k for d in roadway_types for k in d.keys()]))
     fields.append(USRAP_SEGMENT)
+
     # create new field to identify USRAP Segments
     arcpy.AddField_management(feature_class, USRAP_SEGMENT, 'TEXT',
                               field_length=3, field_alias=USRAP_SEGMENT)
-    # take a segment to from baseline route feature class
+    # Take a segment to from baseline route feature class
     with arcpy.da.UpdateCursor(feature_class, fields) as cursor:
         for row in cursor:
             for roadway_type in roadway_types:
@@ -270,7 +303,7 @@ def identify_usrap_segment(feature_class, roadway_types):
                     truth_table.append(False)
                     break
 
-                # test a segment on roadway type to identify it as usrap segment
+                # Test a segment on roadway type to identify it as usrap segment
                 for field in roadway_type.keys():
                     try:
                         # check for access control
@@ -314,12 +347,14 @@ def merge_segments(update_row, update_cursor, fields, feature_class, condition):
         update its field value  """
     try:
         # find the adjacent segments
+        oid_field_name = arcpy.Describe(feature_class).OIDFieldName
         adjacent = arcpy.SelectLayerByLocation_management(
             feature_class,
             'BOUNDARY_TOUCHES',
             update_row[-1],
             selection_type='NEW_SELECTION')
         OID_merged = []
+
         # take a adjacent segment to merge on merge condition fulfill
         where = "{0} <> 'NO'".format(USRAP_SEGMENT)
         with arcpy.da.SearchCursor(adjacent, fields, where) as cursor:
@@ -379,6 +414,7 @@ def merge_segments(update_row, update_cursor, fields, feature_class, condition):
                         truth_table.append(float(pre_val >= tup[2] and
                                                  float(cur_val) >= tup[2]))
 
+
                 # proceed to merge geometry when all conditions are satisfied
                 if not False in truth_table:
                     update_row[avg_aadt[0]] = avg_aadt[1]
@@ -396,11 +432,14 @@ def merge_segments(update_row, update_cursor, fields, feature_class, condition):
             where = ''
             if len(OID_merged) > 0:
                 merged_oids = map(str, OID_merged)
-                where = 'OBJECTID = ' + ' OR OBJECTID = '.join(merged_oids)
+                oidFieldName = arcpy.Describe(feature_class).oidFieldName
+                where = "{0} = ".format(oidFieldName) + \
+                        " OR {0} = ".format(oidFieldName).join(merged_oids)
                 arcpy.SelectLayerByAttribute_management(feature_class,
                                                         'NEW_SELECTION',
                                                         where)
                 arcpy.DeleteRows_management(feature_class)
+
                 # Recursive call with updated row
                 return merge_segments(update_row, update_cursor, fields,
                                       feature_class, condition)
@@ -417,7 +456,8 @@ def add_segids(feature_class, field_name):
         arcpy.AddField_management(feature_class, field_name, 'LONG',
                                   field_alias=field_name)
         segment_id = USRAP_SEGID_START_FROM
-        with arcpy.da.UpdateCursor(feature_class, [field_name]) as update_cur:
+        with arcpy.da.UpdateCursor(feature_class, [field_name]) \
+                as update_cur:
             for row in update_cur:
                 row[0] = segment_id
                 segment_id += 1
@@ -467,7 +507,7 @@ def main():
                                                     dom_code.values()):
         message = "is only accepted for Partial Access Control description"
         msg = "Description: '{0}' {1}".format(value_access_control_partial,
-                                             message)
+                                              message)
         raise arcpy.ExecuteError(msg)
 
     if value_access_control_no.lower() not in (des.lower()
@@ -517,10 +557,10 @@ def main():
         msg = "Description: '{0}' {1}".format(value_area_type_urban, message)
         raise arcpy.ExecuteError(msg)
 
-    if value_area_type_urban.lower() not in (des.lower()
+    if value_area_type_rural.lower() not in (des.lower()
                                              for des in dom_code.values()):
         message = "is only accepted for Rural Area description"
-        msg = "Description: '{0}' {1}".format(value_area_type_urban, message)
+        msg = "Description: '{0}' {1}".format(value_area_type_rural, message)
         raise arcpy.ExecuteError(msg)
 
     ftrclass_speed_limit = arcpy.GetParameterAsText(14)
@@ -635,6 +675,7 @@ def main():
                                                field_speed_limit_info,
                                                USRAP_SPEED_LIMIT)
         arcpy.SetProgressorPosition()
+
         if len(ftrclass_aadt_multi_layers) > 0:
             # combine attributes of identity result and AADT
             new_fields = []
@@ -746,7 +787,6 @@ def main():
                       LESS_THAN_EQUAL_TO_OR_MORE_THAN_EQUAL_TO, 50, 55),
                      (USRAP_AVG_AADT, LESS_THAN_EQUAL_TO, 20)]
 
-        layer = arcpy.MakeFeatureLayer_management(baseline_selected, 'layer')
         arcpy.ResetProgressor()
 
         max_val = int(arcpy.GetCount_management(baseline_selected)[0])
@@ -755,11 +795,20 @@ def main():
         msg = "Merging features... this may take a while"
         arcpy.AddMessage(msg)
         arcpy.SetProgressorLabel(msg)
+
+        layer = arcpy.MakeFeatureLayer_management(baseline_selected, 'layer')
+
+        usrap_where = "{0} = 'YES'".format(USRAP_SEGMENT)
+        usrap_segments = arcpy.SelectLayerByAttribute_management(
+            layer, 'NEW_SELECTION', usrap_where)
+        usrap_count = int(arcpy.GetCount_management(usrap_segments)[0])
+        arcpy.SelectLayerByAttribute_management(layer, 'CLEAR_SELECTION')
+
         # variables for progressor and message
         stepper = 0
         lower = 10
 
-        arcpy.SetProgressor('step', msg, 0, max_val, 1)
+        arcpy.SetProgressor('step', msg, 0, usrap_count, 1)
         # collect field names on which conditions would be checked
         fields = [field[0] for field in condition]
         # insert required field names
@@ -780,16 +829,18 @@ def main():
                     stepper += (len(DELETE_OIDS)*2)
                 else:
                     stepper += 1
-                percent = round(int((stepper/float(max_val))*100))
+                percent = round(int((stepper/float(usrap_count))*100))
                 if lower <= percent < 100:
                     arcpy.AddMessage('Merging completed {0}%'.format(lower))
                     lower += 10
                 arcpy.SetProgressorPosition(stepper)
+
         arcpy.AddMessage('Merging completed {0}%'.format('100'))
         merged_count = int(arcpy.GetCount_management(baseline_selected)[0])
         diff = max_val - merged_count
         arcpy.AddMessage('{0} are merged out of {1} segments'.format(diff,
                                                                      max_val))
+
         # Add USRAP_SEGID to usrap_route feature class
         arcpy.ResetProgressor()
         msg = "Assigning USRAP_SEGID to segments"
@@ -797,18 +848,22 @@ def main():
         arcpy.SetProgressor('step', msg, 0, 2, 1)
         baseline_selected = add_segids(layer, USRAP_SEGID)
         arcpy.SetProgressorPosition()
+
         # copy the rest of data when partial road types are selected for
         # analysis
         if fc_baseline:
             arcpy.SetProgressorLabel("copying non-usrap segments to output")
-            baseline_invert_selected = arcpy.SelectLayerByAttribute_management(\
-                                                fc_baseline, 'SWITCH_SELECTION')
+            baseline_invert_selected = arcpy.SelectLayerByAttribute_management(
+                fc_baseline, 'SWITCH_SELECTION')
             arcpy.Append_management(baseline_invert_selected, baseline_selected,
                                     'NO_TEST')
+            arcpy.AddMessage(int(arcpy.GetCount_management(\
+                             baseline_selected)[0]))
         arcpy.SetProgressorPosition()
-    except Exception as e:
-        arcpy.AddError(str(e))
-        print e
+
+    except Exception as error:
+        arcpy.AddError(str(error))
+
     finally:
         # ensure the in_memory workspace is cleared to free up memory
         arcpy.Delete_management("in_memory")
