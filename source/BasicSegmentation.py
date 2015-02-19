@@ -142,6 +142,15 @@ def identity(target_ftrs, identity_ftrs, output_name=None, output_folder=None):
     except Exception as e:
         arcpy.AddError(str(e))
 
+def year(s):
+    return s.split("_")[2]
+
+def median(y, x):
+    sortedList = sorted(y)
+    mid = int(len(y)/2)
+    if len(y) % 2 == 0: mid -= 1
+    return str(sortedList[int(mid)+x])
+
 def calculate_average(feature_class, existing_fields, new_field):
     """ calculate the average of AADT fields for fields that have
         valid value """
@@ -149,16 +158,43 @@ def calculate_average(feature_class, existing_fields, new_field):
     arcpy.AddField_management(feature_class, new_field, 'DOUBLE',
                               field_alias=new_field)
     fields = list(existing_fields)
+    #create dict with 0 based index for the years location in the fields collection
+    years=[year(field) for field in fields]
+    indexes = [n for n in range(len(years))]
+    field_order = dict(zip(indexes,years))
     fields.append(new_field)
     with arcpy.da.UpdateCursor(feature_class, fields) as cursor:
         for row in cursor:
             try:
-                # calculate the average based on only those fields that
-                # have valid values
-                dividend = sum([float(value) for value in row[:-1]
-                                if value != None])
-                divisor = sum([1 for value in row[:-1] if value != None])
-                row[-1] = round((dividend / divisor), 1)
+                #Add all AADT values
+                dividend = sum([float(value) for value in row[:-1] if value != None and float(value) > 0])
+                #count number of years of AADT data for the row
+                divisor = sum([1 for value in row[:-1] if value != None and float(value) > 0])
+                #If data is not avalible for all years use the middle year 
+                # if at least one year is avalible
+                if divisor < len(row[:-1]) and divisor > 0:
+                    testIndex = 0
+                    forwardTest = True
+                    i=0
+                    while i < len(row[:-1]):
+                        mid = median(field_order.values(),testIndex)
+                        value = row[field_order.keys()[field_order.values().index(mid)]]
+
+                        if value != None and value != 0:
+                            row[-1] = value
+                            break
+                        if forwardTest:
+                            testIndex = abs(testIndex) + 1
+                        else:
+                            testIndex = -testIndex
+                        i+=1
+                        forwardTest = not forwardTest 
+                elif divisor == 0:
+                    row[-1] = None
+                else:
+                    #actual average of the values is only calculated when we have
+                    # continous values across all years in the study
+                    row[-1] = round((dividend / divisor), 1)
             except (ValueError, ZeroDivisionError):
                 row[-1] = None
             cursor.updateRow(row)
