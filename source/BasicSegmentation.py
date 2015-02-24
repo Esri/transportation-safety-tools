@@ -1,15 +1,3 @@
-"""
-#-------------------------------------------------------------------------------
-# Name:        BasicSegmentation.py
-# Purpose:     This tool is used to prepare the baseline routes dataset with
-#              all necessary attributes (route name, route type, county,
-#              access control, medians, travel lanes, area type, speed limit
-#              and AADT.
-#
-# Author:      CyberTech Systems and Software Ltd.
-#
-#-------------------------------------------------------------------------------
-"""
 # pylint: disable = C0103, R0912, R0914, R0915, E1103, W0703, W0612, E1101
 # required imports
 import arcpy
@@ -51,6 +39,17 @@ DELETE_OIDS = []
 
 # Name of the final output feature class
 OUTPUT_SEGMENT_NAME = 'Segments'
+
+# Access Control domain description
+value_access_control_full = "Full Access Control"
+value_access_control_partial = "Partial Access Control"
+value_access_control_no = "No Access Control"
+# Median domain description
+value_median_divided = "Divided Roadway"
+value_median_undivided = "Undivided Roadway"
+# AreaType domain description
+value_area_type_urban = "Urban"
+value_area_type_rural = "Rural"
 
 
 def check_name_length(feature_name):
@@ -466,19 +465,21 @@ def add_segids(feature_class, field_name):
     except Exception as e:
         arcpy.AddError(str(e))
 
+def check_domain(fc, fc_info, class_message, main_message):
+    workspace = get_workspace(fc)
+    field = get_field_object(fc, fc_info)
+    dom_codes = get_domain_values(workspace, field.domain)
+
+    if len(dom_codes.keys()) != len(class_message):
+        raise arcpy.ExecuteError(main_message.format(len(class_message)))
+
+    for message, desc in class_message.items():
+        if desc.lower() not in (des.lower() for des in dom_codes.values()):
+            raise arcpy.ExecuteError("Description: '{0}' {1}".format(desc, message))
+
 def main():
     """ main function """
     # Basic segmentation tool's inputs (arranged in accending order)
-    # Access Control domain description
-    value_access_control_full = "Full Access Control"
-    value_access_control_partial = "Partial Access Control"
-    value_access_control_no = "No Access Control"
-    # Median domain description
-    value_median_divided = "Divided Roadway"
-    value_median_undivided = "Undivided Roadway"
-    # AreaType domain description
-    value_area_type_urban = "Urban"
-    value_area_type_rural = "Rural"
 
     ftrclass_route = arcpy.GetParameterAsText(0)
     field_route_name = arcpy.GetParameterAsText(1)
@@ -488,86 +489,39 @@ def main():
     field_county_name = arcpy.GetParameterAsText(5)
     ftrclass_access_control = arcpy.GetParameterAsText(6)
     field_access_control_info = arcpy.GetParameterAsText(7)
-
-    workspace = get_workspace(ftrclass_access_control)
-    field = get_field_object(ftrclass_access_control, field_access_control_info)
-    dom_code = get_domain_values(workspace, field.domain)
-
-    if len(dom_code.keys()) != 3:
-        msg = "Domain to denote Access Controls must contain three coded values"
-        raise arcpy.ExecuteError(msg)
-
-    if value_access_control_full.lower() not in (des.lower()
-                                                 for des in dom_code.values()):
-        message = "is only accepted for Full Access Control description"
-        msg = "Description: '{0}' {1}".format(value_access_control_full, message)
-        raise arcpy.ExecuteError(msg)
-
-    if value_access_control_partial.lower() not in (des.lower() for des in
-                                                    dom_code.values()):
-        message = "is only accepted for Partial Access Control description"
-        msg = "Description: '{0}' {1}".format(value_access_control_partial,
-                                             message)
-        raise arcpy.ExecuteError(msg)
-
-    if value_access_control_no.lower() not in (des.lower()
-                                               for des in dom_code.values()):
-        message = "is only accepted for No Access Control description"
-        msg = "Description: '{0}' {1}".format(value_access_control_no, message)
-        raise arcpy.ExecuteError(msg)
-
     ftrclass_median = arcpy.GetParameterAsText(8)
-    field_median_info = arcpy.GetParameterAsText(9)
-    workspace = get_workspace(ftrclass_median)
-    field = get_field_object(ftrclass_median, field_median_info)
-    dom_code = get_domain_values(workspace, field.domain)
-
-    if len(dom_code.keys()) != 2:
-        msg = "Domain to denote Medians must contain two coded values"
-        raise arcpy.ExecuteError(msg)
-
-    if value_median_divided.lower() not in (des.lower()
-                                            for des in dom_code.values()):
-        message = "is only accepted for Divided Roadway description"
-        msg = "Description: '{0}' {1}".format(value_median_divided, message)
-        raise arcpy.ExecuteError(msg)
-
-    if value_median_undivided.lower() not in (des.lower()
-                                              for des in dom_code.values()):
-        message = "is only accepted for Undivided Roadway description"
-        msg = "Description: '{0}' {1}".format(value_median_undivided, message)
-        raise arcpy.ExecuteError(msg)
-
+    field_median_info = arcpy.GetParameterAsText(9)   
     ftrclass_travel_lanes = arcpy.GetParameterAsText(10)
     field_travel_lanes_info = arcpy.GetParameterAsText(11)
     ftrclass_area_type = arcpy.GetParameterAsText(12)
     field_area_type_info = arcpy.GetParameterAsText(13)
-
-    workspace = get_workspace(ftrclass_area_type)
-    field = get_field_object(ftrclass_area_type, field_area_type_info)
-    dom_code = get_domain_values(workspace, field.domain)
-
-    if len(dom_code.keys()) != 2:
-        msg = "Domain to denote Area Type must contain two coded values"
-        raise arcpy.ExecuteError(msg)
-
-    if value_area_type_urban.lower() not in (des.lower()
-                                             for des in dom_code.values()):
-        message = "is only accepted for Urban Area description"
-        msg = "Description: '{0}' {1}".format(value_area_type_urban, message)
-        raise arcpy.ExecuteError(msg)
-
-    if value_area_type_rural.lower() not in (des.lower()
-                                             for des in dom_code.values()):
-        message = "is only accepted for Rural Area description"
-        msg = "Description: '{0}' {1}".format(value_area_type_rural, message)
-        raise arcpy.ExecuteError(msg)
-
     ftrclass_speed_limit = arcpy.GetParameterAsText(14)
     field_speed_limit_info = arcpy.GetParameterAsText(15)
     ftrclass_aadt_multi_layers = arcpy.GetParameter(16)
     field_aadt_multi_layers_value = arcpy.GetParameterAsText(17)
     output_folder = arcpy.GetParameterAsText(18)
+
+    main_message = "Domain to denote Access Controls must contain {0} coded values"
+    class_message = {
+        "is only accepted for Full Access Control description": value_access_control_full,
+        "is only accepted for Partial Access Control description": value_access_control_partial,
+        "is only accepted for No Access Control description": value_access_control_no
+    }
+    check_domain(ftrclass_access_control, field_access_control_info, class_message, main_message)
+
+    main_message = "Domain to denote Medians must contain {0} coded values";
+    class_message = {
+        "is only accepted for Divided Roadway description": value_median_divided,
+        "is only accepted for Undivided Roadway description": value_median_undivided
+    }
+    check_domain(ftrclass_median, field_median_info, class_message, main_message)
+
+    main_message = "Domain to denote Area Type must contain {0} coded values";
+    class_message = {
+        "is only accepted for Urban Area description": value_area_type_urban,
+        "is only accepted for Rural Area description": value_area_type_rural
+    }
+    check_domain(ftrclass_area_type, field_area_type_info, class_message, main_message)
 
     try:
         max_val = 9 + len(ftrclass_aadt_multi_layers)
