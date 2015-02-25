@@ -51,6 +51,50 @@ value_median_undivided = "Undivided Roadway"
 value_area_type_urban = "Urban"
 value_area_type_rural = "Rural"
 
+# list of road types on which baseline segments will be
+# identified as usrap segment
+# dictionary elements description:-
+#   key - field name from baseline route segment
+#   value - on which that field value will be tested
+#   only USRAP_ACCESS_CONTROL can have list of values
+roadway_type = [{USRAP_AREA_TYPE: value_area_type_rural,
+                    USRAP_LANES: EQUAL_TO_2_LANES,
+                    USRAP_MEDIAN: value_median_undivided,
+                    USRAP_ACCESS_CONTROL: [value_access_control_no,
+                                        value_access_control_partial]},
+                {USRAP_AREA_TYPE: value_area_type_rural,
+                    USRAP_LANES: MORE_THAN_2_LANES,
+                    USRAP_MEDIAN: value_median_undivided,
+                    USRAP_ACCESS_CONTROL: [value_access_control_no,
+                                        value_access_control_partial]},
+                {USRAP_AREA_TYPE: value_area_type_rural,
+                    USRAP_LANES: MORE_THAN_2_LANES,
+                    USRAP_MEDIAN: value_median_divided,
+                    USRAP_ACCESS_CONTROL: [value_access_control_no,
+                                        value_access_control_partial]},
+                {USRAP_AREA_TYPE: value_area_type_rural,
+                    USRAP_LANES: MORE_THAN_2_LANES,
+                    USRAP_MEDIAN: value_median_divided,
+                    USRAP_ACCESS_CONTROL: [value_access_control_full]},
+                {USRAP_AREA_TYPE: value_area_type_urban,
+                    USRAP_LANES: EQUAL_TO_2_LANES,
+                    USRAP_MEDIAN: value_median_undivided,
+                    USRAP_ACCESS_CONTROL: [value_access_control_no,
+                                        value_access_control_partial]},
+                {USRAP_AREA_TYPE: value_area_type_urban,
+                    USRAP_LANES: MORE_THAN_2_LANES,
+                    USRAP_MEDIAN: value_median_undivided,
+                    USRAP_ACCESS_CONTROL: [value_access_control_no,
+                                        value_access_control_partial]},
+                {USRAP_AREA_TYPE: value_area_type_urban,
+                    USRAP_LANES: MORE_THAN_2_LANES,
+                    USRAP_MEDIAN: value_median_divided,
+                    USRAP_ACCESS_CONTROL: [value_access_control_no,
+                                        value_access_control_partial]},
+                {USRAP_AREA_TYPE: value_area_type_urban,
+                    USRAP_LANES: MORE_THAN_2_LANES,
+                    USRAP_MEDIAN: value_median_divided,
+                    USRAP_ACCESS_CONTROL: [value_access_control_full]}]
 
 def check_name_length(feature_name):
     """ check the maximum name length for file geodatabase feature classes,
@@ -154,6 +198,8 @@ def calculate_average(feature_class, existing_fields, new_field):
     """ calculate the average of AADT fields for fields that have
         valid value """
 
+    add_message("Calculating average AADT for each segment")
+   
     arcpy.AddField_management(feature_class, new_field, 'DOUBLE',
                               field_alias=new_field)
     fields = list(existing_fields)
@@ -191,12 +237,13 @@ def calculate_average(feature_class, existing_fields, new_field):
                 elif divisor == 0:
                     row[-1] = None
                 else:
-                    #actual average of the values is only calculated when we have
+                    #actual average of the value is only calculated when we have
                     # continous values across all years in the study
                     row[-1] = round((dividend / divisor), 1)
             except (ValueError, ZeroDivisionError):
                 row[-1] = None
             cursor.updateRow(row)
+    arcpy.SetProgressorPosition()
     return feature_class
 
 def copy_fields(feature_class, fields_name_info, fc_source):
@@ -241,6 +288,8 @@ def combine_attributes(fc_target, fc_identity, fc_identity_field_name,
     """ combines the required fields from other feature classes with
         baseline feature class """
     try:
+        add_formatted_message("Combining {0} into baseline", fc_identity)
+
         if arcpy.Describe(fc_target).hasM:
             fc_target = disable_m_value(fc_target)
         # keep the feature class to find domain in copy_fields function
@@ -285,14 +334,17 @@ def combine_attributes(fc_target, fc_identity, fc_identity_field_name,
         baseline_routes = copy_fields(baseline_routes, field_dict, fc_source)
         # delete the previous field from which rows has beed copied to new field
         arcpy.DeleteField_management(baseline_routes, baseline_route_fields)
+        arcpy.SetProgressorPosition()
         return baseline_routes
     except Exception as e:
+        arcpy.SetProgressorPosition()
         arcpy.AddError(str(e))
 
 def identify_usrap_segment(feature_class, roadway_types):
     """ create new field 'USRAP_SEGMENT' and assign 'YES' or 'NO' value
         according to roadway type """
 
+    add_message("Identifying USRAP segments...")
     # field name for USRAP segments
     fields = list(set([k for d in roadway_types for k in d.keys()]))
     fields.append(USRAP_SEGMENT)
@@ -477,6 +529,16 @@ def check_domain(fc, fc_info, class_message, main_message):
         if desc.lower() not in (des.lower() for des in dom_codes.values()):
             raise arcpy.ExecuteError("Description: '{0}' {1}".format(desc, message))
 
+def add_message(msg):
+    arcpy.SetProgressorLabel(msg)
+    arcpy.AddMessage(msg)
+
+def add_formatted_message(msg, fc):
+    fc_name = os.path.basename(fc)
+    msg = msg.format(fc_name)
+    arcpy.SetProgressorLabel(msg)
+    arcpy.AddMessage(msg)
+
 def main():
     """ main function """
     # Basic segmentation tool's inputs (arranged in accending order)
@@ -523,12 +585,32 @@ def main():
     }
     check_domain(ftrclass_area_type, field_area_type_info, class_message, main_message)
 
+
+    # list of conditions on which two segments will be merged
+    # tuple element description:-
+    #   first element - field name in usrap route feature class
+    #   second element - condition on which fields would tested
+    #       'EQUAL_TO' - two segments must have same field values
+    #       'LESS_THAN_EQUAL_TO_OR_MORE_THAN_EQUAL_TO' - two segment
+    #           must have field values between third element (lower limit)
+    #           and fourth element (upper limit) of same tuple
+    #       LESS_THAN_EQUAL_TO - two segments must have field values
+    #           less than or equal to third element (upper limit) of tuple
+    #       MORE_THAN_EQUAL_TO - two segments must have field values more
+    #           than or equal to the third element (lower limit) of tuple
+    condition = [(USRAP_COUNTY, EQUAL_TO),
+                    (field_route_name, EQUAL_TO),
+                    (field_route_type, EQUAL_TO),
+                    (USRAP_ACCESS_CONTROL, EQUAL_TO),
+                    (USRAP_SPEED_LIMIT,
+                    LESS_THAN_EQUAL_TO_OR_MORE_THAN_EQUAL_TO, 50, 55),
+                    (USRAP_AVG_AADT, LESS_THAN_EQUAL_TO, 20)]
+
     try:
         max_val = 9 + len(ftrclass_aadt_multi_layers)
         arcpy.SetProgressor("step", "Initializing...", 0, max_val, 1)
         msg = "Preparing output workspace"
-        arcpy.SetProgressorLabel(msg)
-        arcpy.AddMessage(msg)
+        add_message("Preparing output workspace")
         if not os.path.exists(os.path.join(output_folder, OUTPUT_GDB_NAME)):
             # create file geodatabase at output location, if not present
             arcpy.CreateFileGDB_management(output_folder, OUTPUT_GDB_NAME)
@@ -541,8 +623,6 @@ def main():
         baseline_selected = fc_baseline = None
         if (len(value_route_type) > 0 and
                 len(value_route_type) != len(baseline_values)):
-            fc_baseline = arcpy.MakeFeatureLayer_management(ftrclass_route,
-                                                            'baseline_selected')
             field = get_field_object(ftrclass_route, field_route_type)
             lookup = None
             if field.domain:
@@ -551,94 +631,61 @@ def main():
                 # create lookup for domain value
                 lookup = get_domain_values(workspace, field.domain)
             where = create_where_clause(field, value_route_type, lookup)
-                # use this tool once and create where condition such as
-                # it cover all the selection parms.
-            baseline_selected = arcpy.SelectLayerByAttribute_management(\
-                                                            fc_baseline,
-                                                            'NEW_SELECTION',
-                                                            where)
+            # use this tool once and create where condition such as
+            # it cover all the selection parms.
+            baseline_selected = arcpy.MakeFeatureLayer_management(ftrclass_route,
+                                                           'baseline_selected', where)
+
         # set label to notify user if no route type is selected
         if len(value_route_type) == 0:
-            msg = "No route type selected. Taking all route types for analysis."
-            arcpy.SetProgressorLabel(msg)
-            arcpy.AddMessage(msg)
+            add_message("No route type selected. Taking all route types for analysis.")
         if not baseline_selected:
             baseline_selected = ftrclass_route
         arcpy.SetProgressorPosition()
 
         # combine attributes of simple route and county
-        fc_name = os.path.basename(ftrclass_county)
-        msg = "Combining {0} into baseline".format(fc_name)
-        arcpy.SetProgressorLabel(msg)
-        arcpy.AddMessage(msg)
         baseline_selected = combine_attributes(baseline_selected,
                                                ftrclass_county,
                                                field_county_name,
                                                USRAP_COUNTY)
-        arcpy.SetProgressorPosition()
+        
 
         # combine attributes of identity result and access control
-        fc_name = os.path.basename(ftrclass_access_control)
-        msg = "Combining {0} into baseline".format(fc_name)
-        arcpy.SetProgressorLabel(msg)
-        arcpy.AddMessage(msg)
         baseline_selected = combine_attributes(baseline_selected,
                                                ftrclass_access_control,
                                                field_access_control_info,
                                                USRAP_ACCESS_CONTROL)
-        arcpy.SetProgressorPosition()
 
         # combine attributes of identity result and medians
-        fc_name = os.path.basename(ftrclass_median)
-        msg = "Combining {0} into baseline".format(fc_name)
-        arcpy.SetProgressorLabel(msg)
-        arcpy.AddMessage(msg)
         baseline_selected = combine_attributes(baseline_selected,
                                                ftrclass_median,
                                                field_median_info,
                                                USRAP_MEDIAN)
-        arcpy.SetProgressorPosition()
+
         # combine attributes of identity result and travel lanes
-        fc_name = os.path.basename(ftrclass_travel_lanes)
-        msg = "Combining {0} into baseline".format(fc_name)
-        arcpy.SetProgressorLabel(msg)
-        arcpy.AddMessage(msg)
         baseline_selected = combine_attributes(baseline_selected,
                                                ftrclass_travel_lanes,
                                                field_travel_lanes_info,
                                                USRAP_LANES)
-        arcpy.SetProgressorPosition()
+
         # combine attributes of identity result and area type
-        fc_name = os.path.basename(ftrclass_area_type)
-        msg = "Combining {0} into baseline".format(fc_name)
-        arcpy.SetProgressorLabel(msg)
-        arcpy.AddMessage(msg)
         baseline_selected = combine_attributes(baseline_selected,
                                                ftrclass_area_type,
                                                field_area_type_info,
                                                USRAP_AREA_TYPE)
-        arcpy.SetProgressorPosition()
+
         # combine attributes of identity result and speed limit
         # and save the usrap segment feature class to gdb
-        fc_name = os.path.basename(ftrclass_speed_limit)
-        msg = "Combining {0} into baseline".format(fc_name)
-        arcpy.SetProgressorLabel(msg)
-        arcpy.AddMessage(msg)
         baseline_selected = combine_attributes(baseline_selected,
                                                ftrclass_speed_limit,
                                                field_speed_limit_info,
                                                USRAP_SPEED_LIMIT)
-        arcpy.SetProgressorPosition()
+
         if len(ftrclass_aadt_multi_layers) > 0:
             # combine attributes of identity result and AADT
             new_fields = []
             for ftr in ftrclass_aadt_multi_layers:
-                fc_name = os.path.basename(ftr.value)
-                msg = "Combining {0} into baseline".format(fc_name)
-                arcpy.SetProgressorLabel(msg)
-                arcpy.AddMessage(msg)
-                new_field = USRAP_AADT_YYYY + '_' + \
-                            os.path.basename(ftr.value)[-4:]
+                new_field = USRAP_AADT_YYYY + '_' + os.path.basename(ftr.value)[-4:]
 
                 new_fields.append(new_field)
                 seg_name = None
@@ -653,65 +700,15 @@ def main():
                                                        new_field,
                                                        seg_name,
                                                        out_gdb)
-                arcpy.SetProgressorPosition()
+
 
             # calculate the average of all supplied years of AADT
-            msg = "Calculating average AADT for each segment"
-            arcpy.SetProgressorLabel(msg)
-            arcpy.AddMessage(msg)
             baseline_selected = calculate_average(baseline_selected,
                                                   new_fields,
                                                   USRAP_AVG_AADT)
-            arcpy.SetProgressorPosition()
-        # list of road types on which baseline segments will be
-        # identified as usrap segment
-        # dictionary elements description:-
-        #   key - field name from baseline route segment
-        #   value - on which that field value will be tested
-        #   only USRAP_ACCESS_CONTROL can have list of values
-        roadway_type = [{USRAP_AREA_TYPE: value_area_type_rural,
-                         USRAP_LANES: EQUAL_TO_2_LANES,
-                         USRAP_MEDIAN: value_median_undivided,
-                         USRAP_ACCESS_CONTROL: [value_access_control_no,
-                                                value_access_control_partial]},
-                        {USRAP_AREA_TYPE: value_area_type_rural,
-                         USRAP_LANES: MORE_THAN_2_LANES,
-                         USRAP_MEDIAN: value_median_undivided,
-                         USRAP_ACCESS_CONTROL: [value_access_control_no,
-                                                value_access_control_partial]},
-                        {USRAP_AREA_TYPE: value_area_type_rural,
-                         USRAP_LANES: MORE_THAN_2_LANES,
-                         USRAP_MEDIAN: value_median_divided,
-                         USRAP_ACCESS_CONTROL: [value_access_control_no,
-                                                value_access_control_partial]},
-                        {USRAP_AREA_TYPE: value_area_type_rural,
-                         USRAP_LANES: MORE_THAN_2_LANES,
-                         USRAP_MEDIAN: value_median_divided,
-                         USRAP_ACCESS_CONTROL: [value_access_control_full]},
-                        {USRAP_AREA_TYPE: value_area_type_urban,
-                         USRAP_LANES: EQUAL_TO_2_LANES,
-                         USRAP_MEDIAN: value_median_undivided,
-                         USRAP_ACCESS_CONTROL: [value_access_control_no,
-                                                value_access_control_partial]},
-                        {USRAP_AREA_TYPE: value_area_type_urban,
-                         USRAP_LANES: MORE_THAN_2_LANES,
-                         USRAP_MEDIAN: value_median_undivided,
-                         USRAP_ACCESS_CONTROL: [value_access_control_no,
-                                                value_access_control_partial]},
-                        {USRAP_AREA_TYPE: value_area_type_urban,
-                         USRAP_LANES: MORE_THAN_2_LANES,
-                         USRAP_MEDIAN: value_median_divided,
-                         USRAP_ACCESS_CONTROL: [value_access_control_no,
-                                                value_access_control_partial]},
-                        {USRAP_AREA_TYPE: value_area_type_urban,
-                         USRAP_LANES: MORE_THAN_2_LANES,
-                         USRAP_MEDIAN: value_median_divided,
-                         USRAP_ACCESS_CONTROL: [value_access_control_full]}]
+
 
         # baseline segment will be identified as usrap segment
-        msg = "Identifying USRAP segments..."
-        arcpy.SetProgressorLabel(msg)
-        arcpy.AddMessage(msg)
         baseline_selected = identify_usrap_segment(baseline_selected,
                                                    roadway_type)
         # delete duplicate records
@@ -720,35 +717,12 @@ def main():
         baseline_selected = arcpy.DeleteIdentical_management(baseline_selected,
                                                              fields)
 
-        # list of conditions on which two segments will be merged
-        # tuple element description:-
-        #   first element - field name in usrap route feature class
-        #   second element - condition on which fields would tested
-        #       'EQUAL_TO' - two segments must have same field values
-        #       'LESS_THAN_EQUAL_TO_OR_MORE_THAN_EQUAL_TO' - two segment
-        #           must have field values between third element (lower limit)
-        #           and fourth element (upper limit) of same tuple
-        #       LESS_THAN_EQUAL_TO - two segments must have field values
-        #           less than or equal to third element (upper limit) of tuple
-        #       MORE_THAN_EQUAL_TO - two segments must have field values more
-        #           than or equal to the third element (lower limit) of tuple
-        condition = [(USRAP_COUNTY, EQUAL_TO),
-                     (field_route_name, EQUAL_TO),
-                     (field_route_type, EQUAL_TO),
-                     (USRAP_ACCESS_CONTROL, EQUAL_TO),
-                     (USRAP_SPEED_LIMIT,
-                      LESS_THAN_EQUAL_TO_OR_MORE_THAN_EQUAL_TO, 50, 55),
-                     (USRAP_AVG_AADT, LESS_THAN_EQUAL_TO, 20)]
-
         layer = arcpy.MakeFeatureLayer_management(baseline_selected, 'layer')
         arcpy.ResetProgressor()
 
         max_val = int(arcpy.GetCount_management(baseline_selected)[0])
-        msg = '{0} segments present after combining attributes'.format(max_val)
-        arcpy.AddMessage(msg)
-        msg = "Merging features... this may take a while"
-        arcpy.AddMessage(msg)
-        arcpy.SetProgressorLabel(msg)
+        add_message('{0} segments present after combining attributes'.format(max_val))
+        add_message("Merging features... this may take a while")
         # variables for progressor and message
         stepper = 0
         lower = 10
