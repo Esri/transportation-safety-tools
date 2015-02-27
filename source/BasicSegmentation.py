@@ -156,7 +156,7 @@ def create_where_clause(field, route_types, lookup=None):
                                                      route_type)
     return where_clause
 
-def identity(target_ftrs, identity_ftrs, output_name=None, output_folder=None):
+def identity(target_ftrs, identity_ftrs, output_name=None, output_folder=None, cluster_tolerance=""):
     """ perform identity analysis on target feature class with identity
         feature class """
     try:
@@ -173,7 +173,7 @@ def identity(target_ftrs, identity_ftrs, output_name=None, output_folder=None):
         out_ftrs = check_name_length(out_ftrs)
         # identity operation to combine attributes
         result = arcpy.Identity_analysis(target_ftrs, identity_ftrs, out_ftrs,
-                                         "NO_FID")[0]
+                                         "NO_FID", cluster_tolerance)[0]
         feature_name = check_name_length("sp" + os.path.basename(str(result)))
         if output_name:
             feature_name = output_name
@@ -284,7 +284,7 @@ def copy_fields(feature_class, fields_name_info, fc_source):
         arcpy.AddError(str(error))
 
 def combine_attributes(fc_target, fc_identity, fc_identity_field_name,
-                       new_field_name, output_name=None, output_folder=None):
+                       new_field_name, output_name=None, output_folder=None, cluster_tolerance=""):
     """ combines the required fields from other feature classes with
         baseline feature class """
     try:
@@ -304,11 +304,17 @@ def combine_attributes(fc_target, fc_identity, fc_identity_field_name,
         # into baseline
 
         baseline_routes = identity(fc_target, fc_identity,
-                                   output_name, output_folder)
+                                   output_name, output_folder, cluster_tolerance)
         # get list of fields in identity feature class, except the selected
         # field these fields are not required to be carried over
 
         fc_identity_fields = []
+        #for field in arcpy.Describe(fc_identity).fields:
+        #    if field.name != fc_identity_field_name and \
+        #            not field.required and \
+        #            not field.name.lower().startswith('shape') and \
+        #            not fc_target_fields.count(field.name) > 0:
+        #        fc_identity_fields.append(field.name.lower())
         for field in arcpy.Describe(fc_identity).fields:
             if field.name != fc_identity_field_name and \
                     not field.required and \
@@ -562,6 +568,7 @@ def main():
     ftrclass_aadt_multi_layers = arcpy.GetParameter(16)
     field_aadt_multi_layers_value = arcpy.GetParameterAsText(17)
     output_folder = arcpy.GetParameterAsText(18)
+    cluster_tolerance = arcpy.GetParameterAsText(19)
 
     main_message = "Domain to denote Access Controls must contain {0} coded values"
     class_message = {
@@ -647,39 +654,38 @@ def main():
         baseline_selected = combine_attributes(baseline_selected,
                                                ftrclass_county,
                                                field_county_name,
-                                               USRAP_COUNTY)
+                                               USRAP_COUNTY,None,None,cluster_tolerance)
         
-
         # combine attributes of identity result and access control
         baseline_selected = combine_attributes(baseline_selected,
                                                ftrclass_access_control,
                                                field_access_control_info,
-                                               USRAP_ACCESS_CONTROL)
+                                               USRAP_ACCESS_CONTROL,None,None,cluster_tolerance)
 
         # combine attributes of identity result and medians
         baseline_selected = combine_attributes(baseline_selected,
                                                ftrclass_median,
                                                field_median_info,
-                                               USRAP_MEDIAN)
+                                               USRAP_MEDIAN,None,None,cluster_tolerance)
 
         # combine attributes of identity result and travel lanes
         baseline_selected = combine_attributes(baseline_selected,
                                                ftrclass_travel_lanes,
                                                field_travel_lanes_info,
-                                               USRAP_LANES)
+                                               USRAP_LANES,None,None,cluster_tolerance)
 
         # combine attributes of identity result and area type
         baseline_selected = combine_attributes(baseline_selected,
                                                ftrclass_area_type,
                                                field_area_type_info,
-                                               USRAP_AREA_TYPE)
+                                               USRAP_AREA_TYPE,None,None,cluster_tolerance)
 
         # combine attributes of identity result and speed limit
         # and save the usrap segment feature class to gdb
         baseline_selected = combine_attributes(baseline_selected,
                                                ftrclass_speed_limit,
                                                field_speed_limit_info,
-                                               USRAP_SPEED_LIMIT)
+                                               USRAP_SPEED_LIMIT,None,None,cluster_tolerance)
 
         if len(ftrclass_aadt_multi_layers) > 0:
             # combine attributes of identity result and AADT
@@ -699,8 +705,7 @@ def main():
                                                 field_aadt_multi_layers_value,
                                                        new_field,
                                                        seg_name,
-                                                       out_gdb)
-
+                                                       out_gdb, cluster_tolerance)
 
             # calculate the average of all supplied years of AADT
             baseline_selected = calculate_average(baseline_selected,
