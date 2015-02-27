@@ -430,7 +430,13 @@ def merge_segments(update_row, update_cursor, fields, feature_class, condition):
                     cur_val = current[fields.index(tup[0])]
                     # check for 'EQUAL_TO' condition
                     if tup[1] == EQUAL_TO:
-                        truth_table.append(pre_val == cur_val)
+                        if(tup[0] == USRAP_ACCESS_CONTROL):
+                            #no and partial access should be evaluated as the same
+                            truth_table.append(pre_val == cur_val or 
+                                               (str(pre_val) != value_access_control_full and 
+                                                str(cur_val) != value_access_control_full))
+                        else:
+                            truth_table.append(pre_val == cur_val)
                         continue
                     # check for 'LESS_THAN_EQUAL_TO' condition
                     elif tup[1] == LESS_THAN_EQUAL_TO:
