@@ -157,7 +157,6 @@ def get_usrap_segments(input_segment_fc):
         arcpy.AddError("Error occurred while getting USRAP_SEGMENT.")
         return []
 
-
 def assign_segid_to_crashes(max_dist, usrap_segment_layer, input_crash_fc):
     """
     This function first create the Field mapping and then performs the
@@ -208,7 +207,6 @@ def assign_segid_to_crashes(max_dist, usrap_segment_layer, input_crash_fc):
                        "Crash Feature Class.")
         return False
 
-
 def assign_crashes_to_segments(input_segment_fc, crash_years, crash_year_field):
     """
     This function first adds the fields for each year to get the crash count.
@@ -238,7 +236,7 @@ def assign_crashes_to_segments(input_segment_fc, crash_years, crash_year_field):
 
             arcpy.CalculateField_management(SEGMENT_OUTPUT_NAME,
                                             "{0}{1}".format(CRASH_YEAR_FIELD,
-                                                            str(year)), 0)
+                                                            str(year)), 0, "PYTHON_9.3")
 
         #   Add fields for Total and Average crashes in the
         #   segment feature class
@@ -848,9 +846,9 @@ def get_segment_error(min_avg_crashes):
                     error_msg = "Average crash <= 3"
                     per_of_segment += 1
 
-                elif avg_check > 3 and\
-                        int(segment_row[-1]) in xrange(3, avg_check + 1) and\
-                        segment_row[-1] <= avg_check:
+                elif (int(avg_check) > 3 and
+                        int(segment_row[-1]) in xrange(3, int(avg_check) + 1) and 
+                            segment_row[-1] <= int(avg_check)):
                     error_msg = "Average crash <= {0}".format(min_avg_crashes)
                     crash_per_seg += 1
 
@@ -863,8 +861,7 @@ def get_segment_error(min_avg_crashes):
                 with arcpy.da.InsertCursor(SEGMENT_ERROR_TABLE_NAME,
                                            segment_insert_fields)\
                                            as insert_cursor:
-                    insert_cursor.insertRow(error_row)
-
+                        insert_cursor.insertRow(error_row)
 
         #   First get USRAP Segment count
         usrap_where = "{0} = 'YES'".format(USRAP_SEGMENT_FIELD_NAME)
@@ -988,8 +985,8 @@ def get_crash_errors(crash_year_field, crash_route_field,
                                blank_route,
                                "{0}%".format(round(blank_rt_per, 4))],
 
-                              ["% of Crashes with Route Name does not" +
-                               " matched with Segment Route Name",
+                              ["% of Crashes where Route Name does not" +
+                               " match Segment Route Name",
                                unmatched_routes,
                                "{0}%".format(round(unmatched_rt_per, 4))]]
 
