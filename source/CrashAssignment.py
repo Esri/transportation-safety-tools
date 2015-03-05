@@ -424,7 +424,7 @@ def check_criteria(sorted_features_layer, condition, criteria, check_fields):
         check_condition_with_aadt = build_check_condition(
             sorted_features_layer, condition, criteria, "")
         #   Merging by relaxing Speed Limit. Include AVG_AADT value check
-        if check_condition_with_aadt:
+        if check_condition_with_aadt and condition != "end_result":
             arcpy.AddMessage("Merging by relaxing Speed Limit..")
             arcpy.SetProgressorLabel("Merging by relaxing Speed Limit..")
             step_count = 1
@@ -443,8 +443,8 @@ def check_criteria(sorted_features_layer, condition, criteria, check_fields):
 
                 _ = build_check_condition(sorted_features_layer, condition,
                                           criteria, "end_result")
-        else:
-            arcpy.AddMessage("It is satisfying the criteria." +
+            else:
+                arcpy.AddMessage("It is satisfying the criteria." +
                              " Merging will not be performed further.")
 
     except Exception:
@@ -489,7 +489,7 @@ def build_check_condition(sorted_features_layer, condition, criteria, param):
                         " {1} out of {2} USRAP segments")
                        .format(condition, selected_count, usrap_count))
             arcpy.AddMessage(msg)
-            if_condition = selected_count > 0
+            if_condition = int(selected_count) > 0
 
         else:
             # Calculating percentage with respect to USRAP segment count
@@ -505,7 +505,15 @@ def build_check_condition(sorted_features_layer, condition, criteria, param):
                 msg = (("% of USRAP segments having crashes <= 3 : {0}%")
                        .format('%.3f' % per_segments))
             arcpy.AddMessage(msg)
-            if_condition = per_segments > condition
+            if_condition = int(per_segments) < int(condition)
+            if not if_condition:
+                arcpy.AddMessage("Speed Limit and AADT have been relaxed.\n" +
+                                 "The {0}% max for segments with < 3 crashes was not met.\n".format(condition) +   
+                                "Merging will not be performed further.\n" +
+                                "Please review the output Error tables.")
+            else:
+                arcpy.AddMessage("{0}% max for segments with < 3 crashes was  met.\n".format(condition) +
+                             " Merging will not be performed further.")
         return if_condition
 
     except Exception:
@@ -699,7 +707,10 @@ def calculate_row_values(uc_row, search_row, check_fields):
 
         uc_row, total_aadt, aadt_years = a_values[0], a_values[1], a_values[2]
 
-        avg_aadt = float(total_aadt) / float(aadt_years)
+        if(float(total_aadt) >0 and float(aadt_years) > 0):
+            avg_aadt = float(total_aadt) / float(aadt_years)
+        else:
+            avg_aadt = 0
         uc_row[check_fields.index(AVG_AADT_FIELD_NAME)] = avg_aadt
 
         return uc_row
@@ -897,19 +908,11 @@ def get_crash_errors(crash_year_field, crash_route_field,
     log table
     """
     try:
-        sorted_crash_fc = arcpy.Sort_management(
-            CRASH_OUTPUT_NAME, r"in_memory\sorted_crash",
-            [[SEGMENTID_FIELD_NAME, "ASCENDING"]])
-
-        sorted_segment_fc = arcpy.Sort_management(
-            SEGMENT_OUTPUT_NAME, r"in_memory\sorted_segments",
-            [[SEGMENTID_FIELD_NAME, "ASCENDING"]])
-
         unassigned_crashes = 0
         blank_year = 0
         blank_route = 0
         unmatched_routes = 0
-        with arcpy.da.SearchCursor(sorted_crash_fc, ["OID@", crash_year_field,
+        with arcpy.da.SearchCursor(CRASH_OUTPUT_NAME, ["OID@", crash_year_field,
                                                      crash_route_field,
                                                      SEGMENTID_FIELD_NAME])\
                                                      as crash_search_cursor:
@@ -928,7 +931,7 @@ def get_crash_errors(crash_year_field, crash_route_field,
                 else:
                     where = "{0} = {1}".format(SEGMENTID_FIELD_NAME,
                                                crash_row[-1])
-                    with arcpy.da.SearchCursor(sorted_segment_fc,
+                    with arcpy.da.SearchCursor(SEGMENT_OUTPUT_NAME,
                                                [segment_route_name_field],
                                                where) as seg_search_cursor:
                         for row in seg_search_cursor:
@@ -1053,7 +1056,7 @@ def check_total_crashes(unassigned_crashes):
                          .format(crash_count))
         msg = ("The number of crashes assigned to all" +
                " segments on the network plus all unassigned" +
-               " crashed is not equal to the total number of" +
+               " crashes is not equal to the total number of" +
                " crashes in the input data set.")
 
         if assigned_crashes + unassigned_crashes != crash_count:
@@ -1116,10 +1119,8 @@ def main():
         sorted_segments = arcpy.Sort_management(
             SEGMENT_OUTPUT_NAME, os.path.join("in_memory", "sorted_segments"),
             [["SHAPE_Length", "ASCENDING"]])
-
         sorted_features_layer = arcpy.MakeFeatureLayer_management(
             sorted_segments, "sorted_features_layer")
-
         #   Delete the previous Segment Feature Class as it is no longer needed
         arcpy.Delete_management(SEGMENT_OUTPUT_NAME)
 
@@ -1151,7 +1152,6 @@ def main():
         check_criteria(sorted_features_layer, min_avg_crashes, "min average",
                        check_fields)
         arcpy.AddMessage("-" * 80)
-
         #   Check for number of crashes per segment < per_of_segments
         msg = ("Checking for percentage of segments with AVG_CRASH <= 3 " +
                "criteria...")
@@ -1160,7 +1160,6 @@ def main():
 
         check_criteria(sorted_features_layer, per_of_segments, "per segments",
                        check_fields)
-
         arcpy.SetProgressorPosition(steps - 1)
         arcpy.AddMessage("Merging of segments completed.")
         arcpy.SetProgressorLabel("Merging of segments Completed")

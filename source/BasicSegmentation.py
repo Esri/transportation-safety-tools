@@ -354,6 +354,7 @@ def identify_usrap_segment(feature_class, roadway_types):
     # field name for USRAP segments
     fields = list(set([k for d in roadway_types for k in d.keys()]))
     fields.append(USRAP_SEGMENT)
+    fields.append(USRAP_SPEED_LIMIT)
     # create new field to identify USRAP Segments
     arcpy.AddField_management(feature_class, USRAP_SEGMENT, 'TEXT',
                               field_length=3, field_alias=USRAP_SEGMENT)
@@ -392,6 +393,12 @@ def identify_usrap_segment(feature_class, roadway_types):
                         continue
                     if False in truth_table:
                         break
+                speed_value = row[fields.index(USRAP_SPEED_LIMIT)]
+                if speed_value in ["", " ", None, "0"]:
+                    truth_table.append(False)
+                else:
+                    truth_table.append(int(speed_value) > 0)
+                    
                 if False not in truth_table:
                     # mark segment as usrap segment 'YES' if it fulfill the
                     # roadway type condition
@@ -550,6 +557,13 @@ def add_formatted_message(msg, fc):
     msg = msg.format(fc_name)
     arcpy.SetProgressorLabel(msg)
     arcpy.AddMessage(msg)
+
+def flag_nonaadt_segments(table):
+    with arcpy.da.UpdateCursor(table, [USRAP_AVG_AADT, USRAP_SEGMENT]) as update_cur:
+        for row in update_cur:
+            if (row[0] in ["", " ", None, 0]):
+                row[1] = 'NO'
+                update_cur.updateRow(row)
 
 def main():
     """ main function """
@@ -769,6 +783,7 @@ def main():
         diff = max_val - merged_count
         arcpy.AddMessage('{0} are merged out of {1} segments'.format(diff,
                                                                      max_val))
+        flag_nonaadt_segments(baseline_selected)
         # Add USRAP_SEGID to usrap_route feature class
         arcpy.ResetProgressor()
         msg = "Assigning USRAP_SEGID to segments"
