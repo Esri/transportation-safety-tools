@@ -18,6 +18,7 @@ USRAP_SEGMENT = 'USRAP_SEGMENT'
 USRAP_AADT_YYYY = 'USRAP_AADT'
 USRAP_AVG_AADT = 'USRAP_AVG_AADT'
 USRAP_SEGID = 'USRAP_SEGID'
+USRAP_ROADWAYTYPE = 'USRAP_ROADWAY_TYPE'
 
 # conditions constants
 EQUAL_TO = 'EQUAL_TO'
@@ -51,6 +52,17 @@ value_median_undivided = "Undivided Roadway"
 value_area_type_urban = "Urban"
 value_area_type_rural = "Rural"
 
+# Roadway type shortnames
+rural_freeway = "Rural Freeway"
+rural_multi_divided ="Rural Multilane Divided"
+rural_multi_undivided = "Rural Multilane Undivided"
+rural_two_undivided = "Rural two-lane Undivided"
+
+urban_freeway = "Urban Freeway"
+urban_multi_divided = "Urban Multilane divided"
+urban_multi_undivided = "Urban Multilane Undivided"
+urban_two_undivided = "Urban two-lane Undivided"
+
 # list of road types on which baseline segments will be
 # identified as usrap segment
 # dictionary elements description:-
@@ -61,40 +73,48 @@ roadway_type = [{USRAP_AREA_TYPE: value_area_type_rural,
                     USRAP_LANES: EQUAL_TO_2_LANES,
                     USRAP_MEDIAN: value_median_undivided,
                     USRAP_ACCESS_CONTROL: [value_access_control_no,
-                                        value_access_control_partial]},
+                                        value_access_control_partial],
+                    USRAP_ROADWAYTYPE: rural_two_undivided},
                 {USRAP_AREA_TYPE: value_area_type_rural,
                     USRAP_LANES: MORE_THAN_2_LANES,
                     USRAP_MEDIAN: value_median_undivided,
                     USRAP_ACCESS_CONTROL: [value_access_control_no,
-                                        value_access_control_partial]},
+                                        value_access_control_partial],
+                    USRAP_ROADWAYTYPE: rural_multi_undivided},
                 {USRAP_AREA_TYPE: value_area_type_rural,
                     USRAP_LANES: MORE_THAN_2_LANES,
                     USRAP_MEDIAN: value_median_divided,
                     USRAP_ACCESS_CONTROL: [value_access_control_no,
-                                        value_access_control_partial]},
+                                        value_access_control_partial],
+                    USRAP_ROADWAYTYPE: rural_multi_divided},
                 {USRAP_AREA_TYPE: value_area_type_rural,
                     USRAP_LANES: MORE_THAN_2_LANES,
                     USRAP_MEDIAN: value_median_divided,
-                    USRAP_ACCESS_CONTROL: [value_access_control_full]},
+                    USRAP_ACCESS_CONTROL: [value_access_control_full],
+                    USRAP_ROADWAYTYPE: rural_freeway},
                 {USRAP_AREA_TYPE: value_area_type_urban,
                     USRAP_LANES: EQUAL_TO_2_LANES,
                     USRAP_MEDIAN: value_median_undivided,
                     USRAP_ACCESS_CONTROL: [value_access_control_no,
-                                        value_access_control_partial]},
+                                        value_access_control_partial],
+                    USRAP_ROADWAYTYPE: urban_two_undivided},
                 {USRAP_AREA_TYPE: value_area_type_urban,
                     USRAP_LANES: MORE_THAN_2_LANES,
                     USRAP_MEDIAN: value_median_undivided,
                     USRAP_ACCESS_CONTROL: [value_access_control_no,
-                                        value_access_control_partial]},
+                                        value_access_control_partial],
+                    USRAP_ROADWAYTYPE: urban_multi_undivided},
                 {USRAP_AREA_TYPE: value_area_type_urban,
                     USRAP_LANES: MORE_THAN_2_LANES,
                     USRAP_MEDIAN: value_median_divided,
                     USRAP_ACCESS_CONTROL: [value_access_control_no,
-                                        value_access_control_partial]},
+                                        value_access_control_partial],
+                    USRAP_ROADWAYTYPE: urban_multi_divided},
                 {USRAP_AREA_TYPE: value_area_type_urban,
                     USRAP_LANES: MORE_THAN_2_LANES,
                     USRAP_MEDIAN: value_median_divided,
-                    USRAP_ACCESS_CONTROL: [value_access_control_full]}]
+                    USRAP_ACCESS_CONTROL: [value_access_control_full],
+                    USRAP_ROADWAYTYPE: urban_freeway}]
 
 def check_name_length(feature_name):
     """ check the maximum name length for file geodatabase feature classes,
@@ -346,7 +366,7 @@ def combine_attributes(fc_target, fc_identity, fc_identity_field_name,
         arcpy.SetProgressorPosition()
         arcpy.AddError(str(e))
 
-def identify_usrap_segment(feature_class, roadway_types):
+def identify_usrap_segment(feature_class, roadway_types, output_folder):
     """ create new field 'USRAP_SEGMENT' and assign 'YES' or 'NO' value
         according to roadway type """
 
@@ -354,13 +374,23 @@ def identify_usrap_segment(feature_class, roadway_types):
     # field name for USRAP segments
     fields = list(set([k for d in roadway_types for k in d.keys()]))
     fields.append(USRAP_SEGMENT)
+    fields.append(USRAP_AVG_AADT)
     fields.append(USRAP_SPEED_LIMIT)
+    fields.append("OID@")
     # create new field to identify USRAP Segments
     arcpy.AddField_management(feature_class, USRAP_SEGMENT, 'TEXT',
                               field_length=3, field_alias=USRAP_SEGMENT)
+
+    # create new field to store USRAP roadway type
+    arcpy.AddField_management(feature_class, USRAP_ROADWAYTYPE, 'TEXT',
+                              field_length=100, field_alias=USRAP_ROADWAYTYPE)
+
+    workspace = os.path.dirname(str(feature_class))
+
     # take a segment to from baseline route feature class
     with arcpy.da.UpdateCursor(feature_class, fields) as cursor:
         for row in cursor:
+            errors = {}
             for roadway_type in roadway_types:
                 truth_table = []
                 if '' in row:
@@ -369,40 +399,52 @@ def identify_usrap_segment(feature_class, roadway_types):
 
                 # test a segment on roadway type to identify it as usrap segment
                 for field in roadway_type.keys():
-                    try:
-                        # check for access control
-                        if field == USRAP_ACCESS_CONTROL:
-                            truth_table.append(row[fields.index(field)] in
-                                               roadway_type[field])
-                        # check for lanes
-                        elif field == USRAP_LANES:
-                            try:
-                                if roadway_type[field] == EQUAL_TO_2_LANES:
-                                    val = float(row[fields.index(field)]) == 2
-                                    truth_table.append(val)
-                                elif roadway_type[field] == MORE_THAN_2_LANES:
-                                    val = float(row[fields.index(field)]) > 2
-                                    truth_table.append(val)
-                            except ValueError:
-                                truth_table.append(False)
-                        else:
-                            index = fields.index(field)
-                            val = row[index] == roadway_type[field]
-                            truth_table.append(val)
-                    except IndexError:
-                        continue
-                    if False in truth_table:
-                        break
+                    if field != USRAP_ROADWAYTYPE:
+                        try:
+                            # check for access control
+                            if field == USRAP_ACCESS_CONTROL:
+                                truth_table.append(row[fields.index(field)] in
+                                                   roadway_type[field])
+                            # check for lanes
+                            elif field == USRAP_LANES:
+                                try:
+                                    if roadway_type[field] == EQUAL_TO_2_LANES:
+                                        val = float(row[fields.index(field)]) == 2
+                                        truth_table.append(val)
+                                    elif roadway_type[field] == MORE_THAN_2_LANES:
+                                        val = float(row[fields.index(field)]) > 2
+                                        truth_table.append(val)
+                                except ValueError:
+                                    truth_table.append(False)
+                            else:
+                                index = fields.index(field)
+                                val = row[index] == roadway_type[field]
+                                truth_table.append(val)
+                        except IndexError:
+                            continue
+                        if False in truth_table:
+                            break
+                # verify we have a value for speed 
                 speed_value = row[fields.index(USRAP_SPEED_LIMIT)]
                 if speed_value in ["", " ", None, "0"]:
                     truth_table.append(False)
                 else:
                     truth_table.append(int(speed_value) > 0)
-                    
+                errors[USRAP_SPEED_LIMIT] = [str(truth_table[-1]), row[-1]]
+
+                #verify we have a value for AADT
+                aadt_value = row[fields.index(USRAP_AVG_AADT)]
+                if aadt_value in ["", " ", None, "0"]:
+                    truth_table.append(False)
+                else:
+                    truth_table.append(aadt_value > 0)
+                errors[USRAP_AVG_AADT] = [str(truth_table[-1]), row[-1]]    
                 if False not in truth_table:
                     # mark segment as usrap segment 'YES' if it fulfill the
                     # roadway type condition
                     row[fields.index(USRAP_SEGMENT)] = 'YES'
+                    # write the short name for the roadway type to the table
+                    row[fields.index(USRAP_ROADWAYTYPE)] = str(roadway_type[USRAP_ROADWAYTYPE])
                     cursor.updateRow(row)
                     break
             if truth_table and False in truth_table:
@@ -522,8 +564,10 @@ def merge_segments(update_row, update_cursor, fields, feature_class, condition):
 def add_segids(feature_class, field_name):
     """ add unique id to USRAP_SEGID in usrap feature class  """
     try:
+        where = "{0} <> 'NO'".format(USRAP_SEGMENT)
         arcpy.SelectLayerByAttribute_management(feature_class,
                                                 'CLEAR_SELECTION')
+        arcpy.SelectLayerByAttribute_management(feature_class, "NEW_SELECTION", where)
         arcpy.AddField_management(feature_class, field_name, 'LONG',
                                   field_alias=field_name)
         segment_id = USRAP_SEGID_START_FROM
@@ -557,13 +601,6 @@ def add_formatted_message(msg, fc):
     msg = msg.format(fc_name)
     arcpy.SetProgressorLabel(msg)
     arcpy.AddMessage(msg)
-
-def flag_nonaadt_segments(table):
-    with arcpy.da.UpdateCursor(table, [USRAP_AVG_AADT, USRAP_SEGMENT]) as update_cur:
-        for row in update_cur:
-            if (row[0] in ["", " ", None, 0]):
-                row[1] = 'NO'
-                update_cur.updateRow(row)
 
 def main():
     """ main function """
@@ -735,7 +772,7 @@ def main():
 
         # baseline segment will be identified as usrap segment
         baseline_selected = identify_usrap_segment(baseline_selected,
-                                                   roadway_type)
+                                                   roadway_type, output_folder)
         # delete duplicate records
         fields = [f.name for f in arcpy.ListFields(baseline_selected)
                   if f.type != "OID"]
@@ -783,13 +820,12 @@ def main():
         diff = max_val - merged_count
         arcpy.AddMessage('{0} are merged out of {1} segments'.format(diff,
                                                                      max_val))
-        flag_nonaadt_segments(baseline_selected)
-        # Add USRAP_SEGID to usrap_route feature class
         arcpy.ResetProgressor()
         msg = "Assigning USRAP_SEGID to segments"
         arcpy.AddMessage(msg)
         arcpy.SetProgressor('step', msg, 0, 2, 1)
         baseline_selected = add_segids(layer, USRAP_SEGID)
+        #baseline_selected = add_segids(baseline_selected, USRAP_SEGID)
         arcpy.SetProgressorPosition()
         # copy the rest of data when partial road types are selected for
         # analysis

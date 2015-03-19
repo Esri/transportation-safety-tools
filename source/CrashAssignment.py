@@ -1,13 +1,3 @@
-"""
-#-------------------------------------------------------------------------------
-# Name:        Assign Crashes
-# Purpose:     This tool assigns the segments to the input crashes.
-#              This also assigns the count of crashes to the segments per year.
-#
-# Author:      CyberTech Systems and Software Ltd.
-#
-#-------------------------------------------------------------------------------
-"""
 import arcpy
 import os
 import sys
@@ -73,7 +63,7 @@ def check_unique_segmentids(input_segment_fc):
         arcpy.SetProgressor("step", "Checking reqiured values..", 0, 6, 1)
         arcpy.AddMessage("\nChecking for unique segment ids..")
         segmentids = []
-        where = "{0} = 'YES' OR {0} = 'NO'".format(USRAP_SEGMENT_FIELD_NAME)
+        where = "{0} = 'YES'".format(USRAP_SEGMENT_FIELD_NAME)
         with arcpy.da.SearchCursor(input_segment_fc, [SEGMENTID_FIELD_NAME,
                                                       USRAP_SEGMENT_FIELD_NAME],
                                    where) as seg_cursor:
