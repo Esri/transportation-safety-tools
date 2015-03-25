@@ -19,6 +19,7 @@ USRAP_AADT_YYYY = 'USRAP_AADT'
 USRAP_AVG_AADT = 'USRAP_AVG_AADT'
 USRAP_SEGID = 'USRAP_SEGID'
 USRAP_ROADWAYTYPE = 'USRAP_ROADWAY_TYPE'
+USRAP_CLASS_ERROR = "USRAP_CLASSIFICATION_ERROR"
 
 # conditions constants
 EQUAL_TO = 'EQUAL_TO'
@@ -376,6 +377,7 @@ def identify_usrap_segment(feature_class, roadway_types, output_folder):
     fields.append(USRAP_SEGMENT)
     fields.append(USRAP_AVG_AADT)
     fields.append(USRAP_SPEED_LIMIT)
+    fields.append(USRAP_CLASS_ERROR)
     fields.append("OID@")
     # create new field to identify USRAP Segments
     arcpy.AddField_management(feature_class, USRAP_SEGMENT, 'TEXT',
@@ -385,6 +387,10 @@ def identify_usrap_segment(feature_class, roadway_types, output_folder):
     arcpy.AddField_management(feature_class, USRAP_ROADWAYTYPE, 'TEXT',
                               field_length=100, field_alias=USRAP_ROADWAYTYPE)
 
+    # create new field to store USRAP classification error
+    arcpy.AddField_management(feature_class, USRAP_CLASS_ERROR, 'TEXT',
+                              field_length=200, field_alias=USRAP_CLASS_ERROR)
+    
     workspace = os.path.dirname(str(feature_class))
 
     # take a segment to from baseline route feature class
@@ -450,6 +456,28 @@ def identify_usrap_segment(feature_class, roadway_types, output_folder):
             if truth_table and False in truth_table:
                 # mark segment as usrap segment 'NO' if it does not fulfill the
                 # roadway type condition
+                allTrue = True
+                has_speed = True
+                has_aadt = True
+                for field in errors.keys():
+                    if str(errors[field][0]) != 'True':
+                        allTrue = False
+                        if str(field) == USRAP_AVG_AADT:
+                            has_aadt = False
+                        else:
+                            has_speed = False
+                error_message = ""
+                if allTrue:
+                    error_message = "Roadway not valid for roadway type classifications"
+                else:
+                    if not has_speed and not has_aadt:
+                        error_message = "Missing Speed limit and AADT values"
+                    elif not has_speed:
+                         error_message = "Missing Speed limit value"
+                    else:
+                        error_message = "Missing AADT value"
+
+                row[fields.index(USRAP_CLASS_ERROR)] = error_message
                 row[fields.index(USRAP_SEGMENT)] = 'NO'
                 cursor.updateRow(row)
     return feature_class
@@ -605,7 +633,6 @@ def add_formatted_message(msg, fc):
 def main():
     """ main function """
     # Basic segmentation tool's inputs (arranged in accending order)
-
     ftrclass_route = arcpy.GetParameterAsText(0)
     field_route_name = arcpy.GetParameterAsText(1)
     field_route_type = arcpy.GetParameterAsText(2)
@@ -648,7 +675,6 @@ def main():
         "is only accepted for Rural Area description": value_area_type_rural
     }
     check_domain(ftrclass_area_type, field_area_type_info, class_message, main_message)
-
 
     # list of conditions on which two segments will be merged
     # tuple element description:-
@@ -768,7 +794,6 @@ def main():
             baseline_selected = calculate_average(baseline_selected,
                                                   new_fields,
                                                   USRAP_AVG_AADT)
-
 
         # baseline segment will be identified as usrap segment
         baseline_selected = identify_usrap_segment(baseline_selected,
