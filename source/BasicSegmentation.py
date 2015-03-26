@@ -378,6 +378,7 @@ def identify_usrap_segment(feature_class, roadway_types, output_folder):
     fields.append(USRAP_AVG_AADT)
     fields.append(USRAP_SPEED_LIMIT)
     fields.append(USRAP_CLASS_ERROR)
+    fields.append(USRAP_COUNTY)
     fields.append("OID@")
     # create new field to identify USRAP Segments
     arcpy.AddField_management(feature_class, USRAP_SEGMENT, 'TEXT',
@@ -409,7 +410,7 @@ def identify_usrap_segment(feature_class, roadway_types, output_folder):
                         try:
                             # check for access control
                             if field == USRAP_ACCESS_CONTROL:
-                                truth_table.append(row[fields.index(field)] in
+                                truth_table.append(row[fields.index(field)] in 
                                                    roadway_type[field])
                             # check for lanes
                             elif field == USRAP_LANES:
@@ -430,21 +431,42 @@ def identify_usrap_segment(feature_class, roadway_types, output_folder):
                             continue
                         if False in truth_table:
                             break
-                # verify we have a value for speed 
-                speed_value = row[fields.index(USRAP_SPEED_LIMIT)]
-                if speed_value in ["", " ", None, "0"]:
+                #No need to do the previous loop if this stuff is missing...TODO move before the previous loop
+                # verify we have a value for USRAP_AREA_TYPE 
+                if row[fields.index(USRAP_AREA_TYPE)] in ["", " ", None, "0"]:
+                    errors[USRAP_AREA_TYPE] = False
                     truth_table.append(False)
-                else:
-                    truth_table.append(int(speed_value) > 0)
-                errors[USRAP_SPEED_LIMIT] = [str(truth_table[-1]), row[-1]]
+                
+                # verify we have a value for USRAP_LANES 
+                if row[fields.index(USRAP_LANES)] in ["", " ", None, "0", 0]:
+                    errors[USRAP_LANES] = False
+                    truth_table.append(False)
+                
+                # verify we have a value for USRAP_MEDIAN 
+                if row[fields.index(USRAP_MEDIAN)] in ["", " ", None, "0", 0]:
+                    errors[USRAP_MEDIAN] = False
+                    truth_table.append(False)
+                
+                # verify we have a value for USRAP_COUNTY 
+                if row[fields.index(USRAP_COUNTY)] in ["", " ", None, "0"]:
+                    errors[USRAP_COUNTY] = False
+                    truth_table.append(False)
 
-                #verify we have a value for AADT
-                aadt_value = row[fields.index(USRAP_AVG_AADT)]
-                if aadt_value in ["", " ", None, "0"]:
+                # verify we have a value for USRAP_ACCESS_CONTROL 
+                if row[fields.index(USRAP_ACCESS_CONTROL)] in ["", " ", None, "0"]:
+                    errors[USRAP_ACCESS_CONTROL] = False
                     truth_table.append(False)
-                else:
-                    truth_table.append(aadt_value > 0)
-                errors[USRAP_AVG_AADT] = [str(truth_table[-1]), row[-1]]    
+
+                # verify we have a value for USRAP_SPEED_LIMIT 
+                if row[fields.index(USRAP_SPEED_LIMIT)] in ["", " ", None, "0", 0]:
+                    errors[USRAP_SPEED_LIMIT] = False
+                    truth_table.append(False)
+
+                #verify we have a value for USRAP_AVG_AADT
+                if row[fields.index(USRAP_AVG_AADT)] in ["", " ", None, "0", 0]:
+                    errors[USRAP_AVG_AADT] = False 
+                    truth_table.append(False)
+                   
                 if False not in truth_table:
                     # mark segment as usrap segment 'YES' if it fulfill the
                     # roadway type condition
@@ -454,30 +476,67 @@ def identify_usrap_segment(feature_class, roadway_types, output_folder):
                     cursor.updateRow(row)
                     break
             if truth_table and False in truth_table:
-                # mark segment as usrap segment 'NO' if it does not fulfill the
-                # roadway type condition
+                #verify that the row has all necessary attributes
+                # log error message is values are missing
                 allTrue = True
                 has_speed = True
                 has_aadt = True
+                has_county = True
+                has_access_control = True
+                has_median = True
+                has_lanes = True
+                has_area_type = True
                 for field in errors.keys():
-                    if str(errors[field][0]) != 'True':
+                    if str(errors[field]) != 'True':
                         allTrue = False
                         if str(field) == USRAP_AVG_AADT:
                             has_aadt = False
-                        else:
+                        if str(field) == USRAP_COUNTY:
+                            has_county = False
+                        if str(field) == USRAP_ACCESS_CONTROL:
+                            has_access_control = False
+                        if str(field) == USRAP_MEDIAN:
+                            has_median = False
+                        if str(field) == USRAP_LANES:
+                            has_lanes = False
+                        if str(field) == USRAP_AREA_TYPE:
+                            has_area_type = False
+                        if str(field) == USRAP_SPEED_LIMIT:
                             has_speed = False
+
                 error_message = ""
+                error_messages = []
+                classification_error_message = "Roadway not valid for roadway type classifications"
                 if allTrue:
-                    error_message = "Roadway not valid for roadway type classifications"
+                    error_messages.append(classification_error_message)
                 else:
-                    if not has_speed and not has_aadt:
-                        error_message = "Missing Speed limit and AADT values"
-                    elif not has_speed:
-                         error_message = "Missing Speed limit value"
+                    if not has_aadt:
+                        error_messages.append("AADT")
+                    if not has_speed:
+                         error_messages.append("Speed Limit")
+                    if not has_county:
+                         error_messages.append("County")
+                    if not has_access_control:
+                        error_messages.append("Access Control")
+                    if not has_median:
+                        error_messages.append("Median")
+                    if not has_lanes:
+                        error_messages.append("Lanes")
+                    if not has_area_type:
+                        error_messages.append("Area Type")   
+                
+                if len(error_messages) > 1:
+                    error_message = "Missing " + (' AND '.join(error_messages)) + " values"
+                else:
+                    if error_messages[0] == classification_error_message:
+                        error_message = error_messages[0]
                     else:
-                        error_message = "Missing AADT value"
+                        error_message = "Missing {0} value".format(error_messages[0])
 
                 row[fields.index(USRAP_CLASS_ERROR)] = error_message
+
+                # mark segment as usrap segment 'NO' if it does not fulfill the
+                # roadway type condition
                 row[fields.index(USRAP_SEGMENT)] = 'NO'
                 cursor.updateRow(row)
     return feature_class
