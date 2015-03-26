@@ -177,10 +177,16 @@ def create_where_clause(field, route_types, lookup=None):
                                                      route_type)
     return where_clause
 
-def identity(target_ftrs, identity_ftrs, output_name=None, output_folder=None, cluster_tolerance=""):
+def identity(target_ftrs, identity_ftrs, output_name=None, output_folder=None, cluster_tolerance="", problem_fields={}):
     """ perform identity analysis on target feature class with identity
         feature class """
     try:
+        if len(problem_fields) > 0:
+            for k in problem_fields.keys():
+                if os.path.basename(str(target_ftrs)).find(str(os.path.basename(k))) > -1:
+                    arcpy.DeleteField_management(target_ftrs, problem_fields[k])
+                    del problem_fields[k]
+
         output_location = IN_MEMORY
         out_ftrs = os.path.basename(str(identity_ftrs))
         if output_folder:
@@ -305,7 +311,7 @@ def copy_fields(feature_class, fields_name_info, fc_source):
         arcpy.AddError(str(error))
 
 def combine_attributes(fc_target, fc_identity, fc_identity_field_name,
-                       new_field_name, output_name=None, output_folder=None, cluster_tolerance=""):
+                       new_field_name, output_name=None, output_folder=None, cluster_tolerance="", problem_fields={}):
     """ combines the required fields from other feature classes with
         baseline feature class """
     try:
@@ -325,7 +331,7 @@ def combine_attributes(fc_target, fc_identity, fc_identity_field_name,
         # into baseline
 
         baseline_routes = identity(fc_target, fc_identity,
-                                   output_name, output_folder, cluster_tolerance)
+                                   output_name, output_folder, cluster_tolerance, problem_fields)
         # get list of fields in identity feature class, except the selected
         # field these fields are not required to be carried over
 
@@ -689,6 +695,33 @@ def add_formatted_message(msg, fc):
     arcpy.SetProgressorLabel(msg)
     arcpy.AddMessage(msg)
 
+def check_key_fields(key_fields, aadt_layers, aadt_field):
+    #verify that none of the other value layers contain a field with the same name 
+    # as another layers key field
+    #if this condition exists it will cause the actual value field to have a new name 
+    # when identity is performed and prevent appropriate values from being transferred to
+    # the target class
+    for aadt_layer in aadt_layers:
+        key_fields[aadt_layer] = [aadt_field]
+
+    problem_fields = {}
+    x = 0
+    for kl in key_fields.keys():
+        key_layer_fields = []
+        for key_layer in key_fields.keys():
+            if kl != key_layer:
+                for f in key_fields[key_layer]:
+                    key_layer_fields.append(str(f))
+        fields = [f.name for f in arcpy.ListFields(kl)]
+        for field in key_layer_fields:
+            if fields.count(field) > 0 and key_fields[kl][0] != field:
+                if problem_fields.keys().count(kl) > 0: 
+                    if not problem_fields[kl].count(field) > 0:
+                        problem_fields[kl].append(field)
+                else:
+                    problem_fields[kl] = [field]
+    return problem_fields
+
 def main():
     """ main function """
     # Basic segmentation tool's inputs (arranged in accending order)
@@ -712,6 +745,16 @@ def main():
     field_aadt_multi_layers_value = arcpy.GetParameterAsText(17)
     output_folder = arcpy.GetParameterAsText(18)
     cluster_tolerance = arcpy.GetParameterAsText(19)
+
+    key_fields = {ftrclass_route : [field_route_name, field_route_type],
+                  ftrclass_county : [field_county_name],
+                  ftrclass_access_control : [field_access_control_info],
+                  ftrclass_median : [field_median_info],
+                  ftrclass_travel_lanes : [field_travel_lanes_info],
+                  ftrclass_area_type : [field_area_type_info],
+                  ftrclass_speed_limit : [field_speed_limit_info]}
+
+    problem_fields = check_key_fields(key_fields, ftrclass_aadt_multi_layers, field_aadt_multi_layers_value)
 
     main_message = "Domain to denote Access Controls must contain {0} coded values"
     class_message = {
@@ -796,38 +839,38 @@ def main():
         baseline_selected = combine_attributes(baseline_selected,
                                                ftrclass_county,
                                                field_county_name,
-                                               USRAP_COUNTY,None,None,cluster_tolerance)
+                                               USRAP_COUNTY,None,None,cluster_tolerance,problem_fields)
         
         # combine attributes of identity result and access control
         baseline_selected = combine_attributes(baseline_selected,
                                                ftrclass_access_control,
                                                field_access_control_info,
-                                               USRAP_ACCESS_CONTROL,None,None,cluster_tolerance)
+                                               USRAP_ACCESS_CONTROL,None,None,cluster_tolerance,problem_fields)
 
         # combine attributes of identity result and medians
         baseline_selected = combine_attributes(baseline_selected,
                                                ftrclass_median,
                                                field_median_info,
-                                               USRAP_MEDIAN,None,None,cluster_tolerance)
+                                               USRAP_MEDIAN,None,None,cluster_tolerance,problem_fields)
 
         # combine attributes of identity result and travel lanes
         baseline_selected = combine_attributes(baseline_selected,
                                                ftrclass_travel_lanes,
                                                field_travel_lanes_info,
-                                               USRAP_LANES,None,None,cluster_tolerance)
+                                               USRAP_LANES,None,None,cluster_tolerance,problem_fields)
 
         # combine attributes of identity result and area type
         baseline_selected = combine_attributes(baseline_selected,
                                                ftrclass_area_type,
                                                field_area_type_info,
-                                               USRAP_AREA_TYPE,None,None,cluster_tolerance)
+                                               USRAP_AREA_TYPE,None,None,cluster_tolerance,problem_fields)
 
         # combine attributes of identity result and speed limit
         # and save the usrap segment feature class to gdb
         baseline_selected = combine_attributes(baseline_selected,
                                                ftrclass_speed_limit,
                                                field_speed_limit_info,
-                                               USRAP_SPEED_LIMIT,None,None,cluster_tolerance)
+                                               USRAP_SPEED_LIMIT,None,None,cluster_tolerance,problem_fields)
 
         if len(ftrclass_aadt_multi_layers) > 0:
             # combine attributes of identity result and AADT
