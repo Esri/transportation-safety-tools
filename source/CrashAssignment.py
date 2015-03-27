@@ -404,7 +404,9 @@ def check_criteria(sorted_features_layer, conditions, criterias, check_fields, s
                 condition_checks.append(check_condition_with_aadt)
                 x+=1
             if False in condition_checks and condition != "end_result":
+                add_message("-" * 80)
                 add_message("Merging by relaxing AADT...")
+                add_message("-" * 80)
                 _ = union_segments(sorted_features_layer, check_fields,
                                     "without_aadt", next_step_count, condition, segment_route_name_field,crash_fields,usrap_where)
 
@@ -490,7 +492,7 @@ def build_check_condition(sorted_features_layer, condition, criteria, param):
         else:
             # Calculating percentage with respect to USRAP segment count
             add_message("-" * 80)
-            add_message("Checking for percentage of segments with AVG_CRASH <= 3 " +
+            add_message("Checking for percentage of segments with TOTAL_CRASH <= 3 " +
                "criteria...")
             per_segments = (float(selected_count) * 100) / float(usrap_count)
             if param.upper() == "relax_aadt".upper():
