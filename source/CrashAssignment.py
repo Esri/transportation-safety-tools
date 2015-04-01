@@ -282,10 +282,9 @@ def caluculate_sum_avg_field(crash_years):
                 total_count = 0
                 num_div_years = 0
                 for i in xrange(len(crash_years)):
-                    if row[i] != 0:
-                        total_count += row[i]
-                        num_div_years += 1
-                if num_div_years == 0:
+                    total_count += row[i]
+                    num_div_years += 1
+                if total_count == 0:
                     row[-1] = None
                     row[-2] = 0
                     update_cursor.updateRow(row)
@@ -323,6 +322,7 @@ def assign_values(input_segment_fc, input_crash_fc, crash_year_field, max_dist,
             for row in crash_search_cursor:
                 if row[0] not in ["", None, " "]:
                     crash_years.add(int(row[0]))
+        crash_years = sorted(crash_years)
         arcpy.SetProgressorPosition()
 
         #   Get AADT years
