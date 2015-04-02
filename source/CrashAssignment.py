@@ -420,7 +420,7 @@ def check_criteria(sorted_features_layer, conditions, criterias, check_fields, s
                     condition_checks.append(check_condition_with_aadt)
                     x+=1
                 if False in condition_checks and condition != "end_result":
-                    add_message("Speed Limit and AADT have been relaxed but the criteria is still not met.\n" +"Merging will not be performed further.\n")
+                    add_warning("Speed Limit and AADT have been relaxed but the criteria is still not met.\n" +"Merging will not be performed further.")
                     add_message("Please review output error tables...")
             else:
                 add_message("Criteria met. Merging will not be performed further.")
@@ -487,7 +487,7 @@ def build_check_condition(sorted_features_layer, condition, criteria, param):
             if if_condition:
                 add_message("Expected Average: {0}, condition was met".format(condition))
             else:
-                add_message("Expected Average: {0}, condition was not met...".format(condition))
+                add_warning("Expected Average: {0}, condition was not met...".format(condition))
                 
         else:
             # Calculating percentage with respect to USRAP segment count
@@ -508,9 +508,9 @@ def build_check_condition(sorted_features_layer, condition, criteria, param):
             arcpy.AddMessage(msg)
             if_condition = int(per_segments) < int(condition)
             if if_condition:
-                add_message("{0}% max for segments with < 3 crashes was met.\n".format(condition))
+                add_message("{0}% max for segments with <= 3 crashes was met.".format(condition))
             else:
-                add_message("{0}% max for segments with < 3 crashes was not met.\n".format(condition))
+                add_warning("{0}% max for segments with <= 3 crashes was not met.".format(condition))
         
         arcpy.SelectLayerByAttribute_management(sorted_features_layer,
                                                 "CLEAR_SELECTION")        
@@ -541,14 +541,14 @@ def union_segments(sorted_features_layer, check_fields, aadt_check, step_count,
         #get sorted cursor
         delete_oids = []
         union_geoms = []
-        seg_ids = {}
+        seg_ids = []
         arcpy.SelectLayerByAttribute_management(sorted_features_layer, "NEW_SELECTION",where)
         with arcpy.da.UpdateCursor(sorted_features_layer, check_fields, sql_clause=(None, 'ORDER BY ' + USRAP_ROADWAY_TYPE_FIELDNAME + " ASC")) as update_cursor:
             for row in update_cursor:
                 #select all usRAP segments
                 arcpy.SelectLayerByAttribute_management(sorted_features_layer, "NEW_SELECTION",where)
                 #for each usRAP segment query for additional segments that touch
-                arcpy.SelectLayerByLocation_management(sorted_features_layer, "BOUNDARY_TOUCHES", row[-1], selection_type="NEW_SELECTION")
+                arcpy.SelectLayerByLocation_management(sorted_features_layer, "BOUNDARY_TOUCHES", row[-1], selection_type="SUBSET_SELECTION")
                 with arcpy.da.SearchCursor(sorted_features_layer, check_fields) as search_cursor:
                     for search_row in search_cursor:
                         #get values from source feature
@@ -601,7 +601,7 @@ def union_segments(sorted_features_layer, check_fields, aadt_check, step_count,
 
                                             update_cursor.updateRow(row)
                                             delete_oids.append(search_row[0])
-                                            seg_ids[seg_id2] = seg_id1
+                                            seg_ids.append([seg_id2, seg_id1])
                                     else:
                                         #This is checked while relaxing AADT
                                         for crash_field in crash_fields:
@@ -624,7 +624,7 @@ def union_segments(sorted_features_layer, check_fields, aadt_check, step_count,
                                         row[-1] = search_row[-1].union(row[-1])
                                         update_cursor.updateRow(row)
                                         delete_oids.append(search_row[0]) 
-                                        seg_ids[seg_id2] = seg_id1                 
+                                        seg_ids.append([seg_id2, seg_id1])               
 
         #delete extras
         if len(delete_oids) > 0:
@@ -635,12 +635,13 @@ def union_segments(sorted_features_layer, check_fields, aadt_check, step_count,
                                                             'NEW_SELECTION',
                                                             where)
             arcpy.DeleteRows_management(sorted_features_layer)
-            for k in seg_ids.keys():
-                where = '{0} = {1} '.format(SEGMENTID_FIELD_NAME, k)
+            for seg_values in seg_ids:
+                #select the old segid
+                where = '{0} = {1} '.format(SEGMENTID_FIELD_NAME, seg_values[0])
                 with arcpy.da.UpdateCursor(CRASH_OUTPUT_NAME, [SEGMENTID_FIELD_NAME], where_clause=where) as update_points_cursor:
-                    for row in update_points_cursor:
-                        row[0] = seg_ids[k]
-                        update_points_cursor.updateRow(row)
+                    for u_row in update_points_cursor:
+                        u_row[0] = seg_values[1]
+                        update_points_cursor.updateRow(u_row)
                 del update_points_cursor
         if len(union_geoms) > 0:
             union_geom_ids = map(str, union_geoms)
@@ -937,6 +938,9 @@ def check_total_crashes(unassigned_crashes):
 
     except Exception:
         arcpy.AddError("Error occurred while generating error tables.")
+
+def add_warning(msg):
+    arcpy.AddWarning(msg)
 
 def add_message(msg):
     arcpy.SetProgressorLabel(msg)
