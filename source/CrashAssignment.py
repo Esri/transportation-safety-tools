@@ -1,11 +1,13 @@
 import arcpy
 import os
 import sys
-import math
+import math, time
 
 # pylint: disable = E1103, E1101, R0914, W0703, R0911, R0912, R0915, C0302
 
 arcpy.env.overwriteOutput = True
+
+IN_MEMORY = 'in_memory'
 
 #======================= Configuration Part ===================================#
 
@@ -37,13 +39,13 @@ USRAP_ROADWAY_TYPE_FIELDNAME = 'USRAP_ROADWAY_TYPE'
 SEGMENT_INCREMENT = 10
 
 #   Crash error table fields
-CRASH_ERROR_TABLE_FIELDS = [["CrashOID", "SHORT"], ["CrashYear", "SHORT"],
+CRASH_ERROR_TABLE_FIELDS = [["CrashOID", "LONG"], ["CrashYear", "SHORT"],
                             ["CrashRouteName", "TEXT"], [SEGMENTID_FIELD_NAME, "TEXT"],
                             ["SegmentRouteName", "TEXT"],
                             ["ErrorMessage", "TEXT"]]
 
 #   Segment error table fields
-SEGMENT_ERROR_TABLE_FIELDS = [["SegmentOID", "SHORT"], [SEGMENTID_FIELD_NAME, "TEXT"],
+SEGMENT_ERROR_TABLE_FIELDS = [["SegmentOID", "LONG"], [SEGMENTID_FIELD_NAME, "TEXT"],
                               ["AVG_CRASH", "TEXT"], [TOTAL_CRASH_FIELD_NAME, "TEXT"],
                               ["ErrorMessage", "TEXT"]]
 
@@ -69,8 +71,9 @@ def create_gdb(output_folder):
         else:
             output_gdb = arcpy.CreateFileGDB_management(output_folder,
                                                         OUTPUT_GDB_NAME[:-4])[0]
-        arcpy.env.workspace = output_gdb
+        arcpy.env.workspace = IN_MEMORY
         arcpy.AddMessage("Output geodatabase created.")
+
         return output_gdb
 
     except arcpy.ExecuteError:
@@ -103,7 +106,11 @@ def get_usrap_segments(input_segment_fc):
         count = int(arcpy.GetCount_management(segment_layer)[0])
         arcpy.AddMessage(("{0} USRAP segments found out of {1}.")
                          .format(count, total_segments))
-        return segment_layer, count
+        if count > 0:
+            return segment_layer, count
+        else:
+            arcpy.AddError("No valid USRAP segments found. \nFurther processing will not be performed.")
+            sys.exit()
 
     except arcpy.ExecuteError:
         arcpy.AddError("Error occurred while getting USRAP_SEGMENT.")
@@ -179,27 +186,28 @@ def assign_crashes_to_segments(input_segment_fc, crash_years, crash_year_field):
                             0, c_count + 1, 1)
 
         #   Copy the features into New Feature Class in output File GDB
-        arcpy.CopyFeatures_management(input_segment_fc, SEGMENT_OUTPUT_NAME)
+        in_mem_segs = IN_MEMORY + os.sep + SEGMENT_OUTPUT_NAME
+        arcpy.CopyFeatures_management(input_segment_fc, in_mem_segs)
 
         arcpy.AddMessage("Adding crash year fields in input segment" +
                          " feature class...")
 
         #   Add fields for each crash year in the segment feature class
         for year in crash_years:
-            arcpy.AddField_management(SEGMENT_OUTPUT_NAME,
+            arcpy.AddField_management(in_mem_segs,
                                       "{0}{1}".format(CRASH_YEAR_FIELD,
                                                       str(year)), "SHORT")
 
-            arcpy.CalculateField_management(SEGMENT_OUTPUT_NAME,
+            arcpy.CalculateField_management(in_mem_segs,
                                             "{0}{1}".format(CRASH_YEAR_FIELD,
                                                             str(year)), 0, "PYTHON_9.3")
 
         #   Add fields for Total and Average crashes in the
         #   segment feature class
-        arcpy.AddField_management(SEGMENT_OUTPUT_NAME, TOTAL_CRASH_FIELD_NAME,
+        arcpy.AddField_management(in_mem_segs, TOTAL_CRASH_FIELD_NAME,
                                   "LONG")
 
-        arcpy.AddField_management(SEGMENT_OUTPUT_NAME, AVG_CRASHES_FIELD_NAME,
+        arcpy.AddField_management(in_mem_segs, AVG_CRASHES_FIELD_NAME,
                                   "DOUBLE")
 
         arcpy.SetProgressorPosition(1)
@@ -212,8 +220,9 @@ def assign_crashes_to_segments(input_segment_fc, crash_years, crash_year_field):
         per_val_list = [int(round((c_count * per_num) / 100))
                         for per_num in xrange(10, 110, 10)]
         perc = 10
+
         with arcpy.da.SearchCursor(CRASH_OUTPUT_NAME,
-                                   [SEGMENTID_FIELD_NAME, crash_year_field])\
+                                   [SEGMENTID_FIELD_NAME, crash_year_field], SEGMENTID_FIELD_NAME + " IS NOT NULL AND " + crash_year_field + " IS NOT NULL")\
                                    as crash_cursor:
             for row in crash_cursor:
                 row_count += 1
@@ -230,7 +239,7 @@ def assign_crashes_to_segments(input_segment_fc, crash_years, crash_year_field):
                     where_clause = "{0} = {1}".format(SEGMENTID_FIELD_NAME,
                                                       row[0])
 
-                    with arcpy.da.UpdateCursor(SEGMENT_OUTPUT_NAME,
+                    with arcpy.da.UpdateCursor(in_mem_segs,
                                                ["{0}{1}".format(\
                                                CRASH_YEAR_FIELD, int(row[1]))],
                                                where_clause) as segment_cursor:
@@ -248,11 +257,6 @@ def assign_crashes_to_segments(input_segment_fc, crash_years, crash_year_field):
         arcpy.AddMessage("Assignment process completed.")
         arcpy.AddMessage("-" * 80)
         return True
-
-    except arcpy.ExecuteError:
-        arcpy.AddError("Error occurred while adding count of crashes to the" +
-                       " segments")
-        return False
 
     except Exception:
         arcpy.AddError("Error occurred while adding count of crashes to the" +
@@ -276,7 +280,7 @@ def caluculate_sum_avg_field(crash_years):
         #   Calculate total crash count and average crashes for each segment.
         #   To calculate the average crashes, dividing by the number of years
         #   for which it has count
-        with arcpy.da.UpdateCursor(SEGMENT_OUTPUT_NAME,
+        with arcpy.da.UpdateCursor(IN_MEMORY + os.sep + SEGMENT_OUTPUT_NAME,
                                    update_fields) as update_cursor:
             for row in update_cursor:
                 total_count = 0
@@ -333,10 +337,6 @@ def assign_values(input_segment_fc, input_crash_fc, crash_year_field, max_dist,
                       for field in segment_fields]
         arcpy.SetProgressorPosition()
 
-    except arcpy.ExecuteError:
-        arcpy.AddError("Error occured while getting AADT or Crash Years.")
-        return []
-
     except Exception:
         arcpy.AddError("Error occured while getting AADT or Crash Years.")
         return []
@@ -349,9 +349,13 @@ def assign_values(input_segment_fc, input_crash_fc, crash_year_field, max_dist,
     arcpy.SetProgressorPosition()
     arcpy.SetProgressorLabel("Assigning {0} to crashes... ".format(\
                              SEGMENTID_FIELD_NAME))
+
+    pts = IN_MEMORY + os.sep + "validPTS"
+    arcpy.MakeFeatureLayer_management(input_crash_fc, pts)
+
     #   Perform Sptial Join with Crash Feature class
     crash_output_fc = assign_segid_to_crashes(max_dist, usrap_segment_layer,
-                                              input_crash_fc)
+                                              pts)
     if not crash_output_fc:
         return []
     arcpy.SetProgressorPosition()
@@ -362,10 +366,9 @@ def assign_values(input_segment_fc, input_crash_fc, crash_year_field, max_dist,
     if not segment_output_fc:
         return []
     else:
-        return crash_years, aadt_years, usrap_count
+        return crash_years, aadt_years, usrap_count, out_gdb
 
 #===================== Merging =================================================#
-
 def check_criteria(sorted_features_layer, conditions, criterias, check_fields, segment_route_name_field, crash_fields):
     """
     This function is used for performing merging of the segments.
@@ -391,6 +394,10 @@ def check_criteria(sorted_features_layer, conditions, criterias, check_fields, s
             add_message("-" * 80)
             step_count = 1
             usrap_where = "{0} = 'YES'".format(USRAP_SEGMENT_FIELD_NAME)
+            arcpy.RepairGeometry_management(sorted_features_layer)
+            flds=[f.name for f in arcpy.ListFields(sorted_features_layer)]
+            arcpy.DeleteIdentical_management(sorted_features_layer,flds)
+
             next_step_count = union_segments(sorted_features_layer, check_fields,
                                             "with_aadt", step_count, condition, segment_route_name_field,crash_fields, usrap_where)
 
@@ -527,10 +534,12 @@ def calculate_length_weighted_avg(val1, length1, val2, length2):
     """
     Calculates the length weighted average
     """
-    a = ((float(val1)*float(length1)) + (float(val2)*float(length2)))
-    b = (float(length1) + float(length2))
-    return round(a/b, 1)
-
+    if val1 != None and length1 != None and val2 != None and length2 != None:
+        a = ((float(val1)*float(length1)) + (float(val2)*float(length2)))
+        b = (float(length1) + float(length2))
+        return round(a/b, 1)
+    elif val1 != None and val2 != None:
+        return round((val1 + val2)/2, 1)
 
 def union_segments(sorted_features_layer, check_fields, aadt_check, step_count,
                   condition, segment_route_name_field, crash_fields, where):
@@ -580,7 +589,6 @@ def union_segments(sorted_features_layer, check_fields, aadt_check, step_count,
                                         #This is checked while relaxing speed limit
                                         if aadt_change_percentage < 20:
                                             #need to maintain and update field values
-                                            #all crash count fields     
                                             for crash_field in crash_fields:
                                                 row_value = row[check_fields.index(crash_field)]
                                                 search_row_value = search_row[check_fields.index(crash_field)]
@@ -588,17 +596,23 @@ def union_segments(sorted_features_layer, check_fields, aadt_check, step_count,
                                             if aadt_change_percentage != 0:
                                                 new_aadt = calculate_length_weighted_avg(aadt_1, row[-2], aadt_2, search_row[-2])
                                                 row[check_fields.index(AVG_AADT_FIELD_NAME)] = new_aadt
-                                            row[-1] = search_row[-1].union(row[-1])
+                                            try:
+                                                if row[-1] != None:
+                                                    row[-1] = search_row[-1].union(row[-1])
+                                                else:
+                                                    row[-1] = search_row[-1]
+                                            except Exception as ex:
+                                                arcpy.AddWarning(ex.message)
+                                            pass
+                                            
                                             union_geoms.append(row[0])
                                             for f in crash_field_values.keys():
                                                 row[check_fields.index(f)] = crash_field_values[f]
-
                                             new_total = float(crash_field_values[TOTAL_CRASH_FIELD_NAME])
                                             new_avg = 0
                                             if new_total > 0:
                                                 new_avg = new_total / float(len(crash_fields) -1)
                                             row[check_fields.index(AVG_CRASHES_FIELD_NAME)] = new_avg
-
                                             update_cursor.updateRow(row)
                                             delete_oids.append(search_row[0])
                                             seg_ids.append([seg_id2, seg_id1])
@@ -613,15 +627,21 @@ def union_segments(sorted_features_layer, check_fields, aadt_check, step_count,
                                             row[check_fields.index(AVG_AADT_FIELD_NAME)] = new_aadt
                                             
                                         for f in crash_field_values.keys():
-                                            row[check_fields.index(f)] = crash_field_values[f]  
-                                            
+                                            row[check_fields.index(f)] = crash_field_values[f]    
                                         new_total = float(crash_field_values[TOTAL_CRASH_FIELD_NAME])
                                         new_avg = 0
                                         if new_total > 0:
                                             new_avg = new_total / float(len(crash_fields) -1)
                                         row[check_fields.index(AVG_CRASHES_FIELD_NAME)] = new_avg  
-                                            
-                                        row[-1] = search_row[-1].union(row[-1])
+                                        
+                                        try:    
+                                            if row[-1] != None:
+                                                row[-1] = search_row[-1].union(row[-1])
+                                            else:
+                                                row[-1] = search_row[-1]
+                                        except Exception as ex:
+                                            arcpy.AddWarning(ex.message)
+                                        pass
                                         update_cursor.updateRow(row)
                                         delete_oids.append(search_row[0]) 
                                         seg_ids.append([seg_id2, seg_id1])               
@@ -644,12 +664,20 @@ def union_segments(sorted_features_layer, check_fields, aadt_check, step_count,
                         update_points_cursor.updateRow(u_row)
                 del update_points_cursor
         if len(union_geoms) > 0:
-            union_geom_ids = map(str, union_geoms)
-            field_oid = str(arcpy.Describe(sorted_features_layer).OIDFieldName)
-            union_where = field_oid +' = ' + ' OR {0} = '.format(field_oid).join(union_geom_ids)
-            union_segments(sorted_features_layer, check_fields, aadt_check, step_count,
-                  condition, segment_route_name_field, crash_fields, union_where)
-    except Exception:
+            try:
+                union_geom_ids = map(str, union_geoms)
+                field_oid = str(arcpy.Describe(sorted_features_layer).OIDFieldName)
+                union_where = field_oid +' = ' + ' OR {0} = '.format(field_oid).join(union_geom_ids)
+                union_segments(sorted_features_layer, check_fields, aadt_check, step_count,
+                      condition, segment_route_name_field, crash_fields, union_where)
+            except Exception as ex:
+                arcpy.AddWarning("Error occured during union")
+                if row != None:
+                    arcpy.AddWarning("Error occurred while merging segments with" +
+                                 " OBJECTID {0}.".format(row[0]))
+                    add_calculate_error(row, check_fields)
+                pass
+    except Exception as ex:
         arcpy.AddError("Error while merging")
         if row != None:
             arcpy.AddWarning("Error occurred while merging segments with" +
@@ -672,8 +700,7 @@ def add_calculate_error(uc_row, check_fields):
         insert_cursor.insertRow(error_row)
 
 #===================== Creating Error Logs ====================================#
-
-def create_error_tables():
+def create_error_tables(out_gdb):
     """
     This function creates the Error Tables needed to log the errors
     """
@@ -683,7 +710,7 @@ def create_error_tables():
                                      CRASH_ERROR_TABLE_NAME)
 
         for field in CRASH_ERROR_TABLE_FIELDS:
-            arcpy.AddField_management(CRASH_ERROR_TABLE_NAME, field[0],
+            arcpy.AddField_management(arcpy.env.workspace + os.sep + CRASH_ERROR_TABLE_NAME, field[0],
                                       field[1], field_alias=field[0])
 
         #   Segment error table
@@ -691,7 +718,7 @@ def create_error_tables():
                                      SEGMENT_ERROR_TABLE_NAME)
 
         for field in SEGMENT_ERROR_TABLE_FIELDS:
-            arcpy.AddField_management(SEGMENT_ERROR_TABLE_NAME, field[0],
+            arcpy.AddField_management(arcpy.env.workspace + os.sep + SEGMENT_ERROR_TABLE_NAME, field[0],
                                       field[1], field_alias=field[0])
 
         #   Summary error table
@@ -699,7 +726,7 @@ def create_error_tables():
                                      ERROR_SUMMARY_TABLE_NAME)
 
         for field in SUMMARY_ERROR_TABLE_FIELDS:
-            arcpy.AddField_management(ERROR_SUMMARY_TABLE_NAME, field[0],
+            arcpy.AddField_management(arcpy.env.workspace + os.sep + ERROR_SUMMARY_TABLE_NAME, field[0],
                                       field[1], field_length=field[2],
                                       field_alias=field[0])
         return True
@@ -707,7 +734,7 @@ def create_error_tables():
     except Exception:
         return False
 
-def get_segment_error(min_avg_crashes):
+def get_segment_error(min_avg_crashes, full_out_path):
     """
     This function checks for Segment not meeting AVG_CRASH criteria and
     add them to the error log table.
@@ -744,8 +771,7 @@ def get_segment_error(min_avg_crashes):
 
         #   First get USRAP Segment count
         usrap_where = "{0} = 'YES'".format(USRAP_SEGMENT_FIELD_NAME)
-        usrap_segments = arcpy.MakeFeatureLayer_management(
-            SEGMENT_OUTPUT_NAME, "usrap_layer", usrap_where)
+        usrap_segments = arcpy.MakeFeatureLayer_management(SEGMENT_OUTPUT_NAME, "usrap_layer", usrap_where)
         usrap_count = int(arcpy.GetCount_management(usrap_segments)[0])
 
         #   Calculate the percentage with respect to USRAP segment count
@@ -767,7 +793,6 @@ def get_segment_error(min_avg_crashes):
     except Exception:
         arcpy.AddError("Error occurred while generating Segment Error table.")
         return False
-
 
 def get_crash_errors(crash_year_field, crash_route_field,
                      segment_route_name_field):
@@ -792,8 +817,11 @@ def get_crash_errors(crash_year_field, crash_route_field,
                     unassigned_crashes += 1
                     error_msg = ("Crash outside the user specified proximity" +
                                  " distance from segment.")
+
                     error_row = [crash_row[0], crash_row[1], crash_row[2],
                                  "-", "-", error_msg]
+                    if crash_row[2] == None:
+                        error_row[2] = ""
                     insert_crash_error(error_row)
                 else:
                     where = "{0} = {1}".format(SEGMENTID_FIELD_NAME,
@@ -841,37 +869,35 @@ def get_crash_errors(crash_year_field, crash_route_field,
         #   Calculate the percentage of each type of crash error and make an
         #   entry into Error Summary table
         crash_count = int(arcpy.GetCount_management(CRASH_OUTPUT_NAME)[0])
-        unassigned_per = (float(unassigned_crashes) / float(crash_count) * 100)
-        blank_year_per = (float(blank_year) / float(crash_count) * 100)
-        blank_rt_per = (float(blank_route) / float(crash_count) * 100)
-        unmatched_rt_per = (float(unmatched_routes) / float(crash_count) * 100)
+        if crash_count > 0:
+            unassigned_per = (float(unassigned_crashes) / float(crash_count) * 100)
+            blank_year_per = (float(blank_year) / float(crash_count) * 100)
+            blank_rt_per = (float(blank_route) / float(crash_count) * 100)
+            unmatched_rt_per = (float(unmatched_routes) / float(crash_count) * 100)
 
-        summary_error_list = [["% of Crashes outside proximity distance",
-                               unassigned_crashes,
-                               "{0}%".format(round(unassigned_per, 4))],
+            summary_error_list = [["% of Crashes outside proximity distance",
+                                   unassigned_crashes,
+                                   "{0}%".format(round(unassigned_per, 4))],
 
-                              ["% of Crashes with Year not maintained",
-                               blank_year,
-                               "{0}%".format(round(blank_year_per, 4))],
+                                  ["% of Crashes with Year not maintained",
+                                   blank_year,
+                                   "{0}%".format(round(blank_year_per, 4))],
 
-                              ["% of Crashes with Route Name not maintained",
-                               blank_route,
-                               "{0}%".format(round(blank_rt_per, 4))],
+                                  ["% of Crashes with Route Name not maintained",
+                                   blank_route,
+                                   "{0}%".format(round(blank_rt_per, 4))],
 
-                              ["% of Crashes where Route Name does not" +
-                               " match Segment Route Name",
-                               unmatched_routes,
-                               "{0}%".format(round(unmatched_rt_per, 4))]]
+                                  ["% of Crashes where Route Name does not" +
+                                   " match Segment Route Name",
+                                   unmatched_routes,
+                                   "{0}%".format(round(unmatched_rt_per, 4))]]
 
-        insert_summary_errors(summary_error_list)
+            insert_summary_errors(summary_error_list)
         return unassigned_crashes
 
     except Exception:
         arcpy.AddError("Error occurred while generating crash error table.")
         return False
-
-    finally:
-        arcpy.Delete_management("in_memory")
 
 def insert_crash_error(error_row):
     """
@@ -883,8 +909,9 @@ def insert_crash_error(error_row):
         with arcpy.da.InsertCursor(CRASH_ERROR_TABLE_NAME,
                                    crash_insert_fields) as insert_cursor:
             insert_cursor.insertRow(error_row)
-    except Exception:
+    except Exception as ex:
         arcpy.AddError("Error occurred while inserting crash error.")
+        arcpy.AddError(ex.message)
 
 def insert_summary_errors(summary_error_list):
     """
@@ -982,9 +1009,10 @@ def main():
 
     crash_years, aadt_years = returned_values[0], returned_values[1]
     usrap_count = returned_values[2]
+    out_gdb = returned_values[3]
 
     #   Create Errors Log tables
-    table_created = create_error_tables()
+    table_created = create_error_tables(out_gdb)
 
 #------------------- Merging Segments -----------------------------------------#
     steps = usrap_count / SEGMENT_INCREMENT
@@ -995,13 +1023,15 @@ def main():
     arcpy.SetProgressor("step", "Merging segments..", 0, steps,
                         SEGMENT_INCREMENT)
     try:
-        sorted_segments = arcpy.Sort_management(
-            SEGMENT_OUTPUT_NAME, os.path.join("in_memory", "sorted_segments"),
+
+        arcpy.CopyFeatures_management(IN_MEMORY + os.sep + SEGMENT_OUTPUT_NAME, output_folder + os.sep + OUTPUT_GDB_NAME + os.sep + SEGMENT_OUTPUT_NAME)
+        sorted_segments = arcpy.Sort_management(output_folder + os.sep + OUTPUT_GDB_NAME + os.sep + SEGMENT_OUTPUT_NAME, 
+            os.path.join(IN_MEMORY, "sorted_segments"),
             [["SHAPE_Length", "ASCENDING"]])
         sorted_features_layer = arcpy.MakeFeatureLayer_management(
             sorted_segments, "sorted_features_layer")
         #   Delete the previous Segment Feature Class as it is no longer needed
-        arcpy.Delete_management(SEGMENT_OUTPUT_NAME)
+        arcpy.Delete_management(output_folder + os.sep + OUTPUT_GDB_NAME + os.sep + SEGMENT_OUTPUT_NAME)
 
         #   Sequence of fields in check_fields is very important.
         #   If more fields need to be checked, add it after "COUNTY_FIELD_NAME"
@@ -1037,8 +1067,9 @@ def main():
         #   in output Geodatabase
         arcpy.SelectLayerByAttribute_management(sorted_features_layer,
                                                 "CLEAR_SELECTION")
-        arcpy.CopyFeatures_management(sorted_features_layer,
-                                      SEGMENT_OUTPUT_NAME)
+
+        full_out_path = output_folder + os.sep + OUTPUT_GDB_NAME + os.sep + SEGMENT_OUTPUT_NAME
+
         arcpy.SetProgressorPosition(steps)
         add_message("-" * 80)
 
@@ -1047,9 +1078,7 @@ def main():
 
     except Exception:
         arcpy.AddError("Error occured while Merging segments..")
-
-    finally:
-        arcpy.Delete_management("in_memory")
+    pass
 
 #------------------- Assign Segment IDs to Crashes from mergerd segments ------#
 
@@ -1062,7 +1091,7 @@ def main():
     add_message(msg)
 
     #   Check for faults in segment feature class output
-    segment_error_added = get_segment_error(min_avg_crashes)
+    segment_error_added = get_segment_error(min_avg_crashes, full_out_path)
 
     if not segment_error_added:
         return
@@ -1079,6 +1108,16 @@ def main():
     #   Check if Unassigned crashes and Assigned crashes are equal to Total
     #   crashes in input dataset
     check_total_crashes(unassigned_crashes)
+
+    arcpy.CopyFeatures_management(CRASH_OUTPUT_NAME, out_gdb + os.sep + CRASH_OUTPUT_NAME)
+    arcpy.CopyFeatures_management(sorted_features_layer, full_out_path)
+
+    arcpy.CopyRows_management(CRASH_ERROR_TABLE_NAME, out_gdb + os.sep + CRASH_ERROR_TABLE_NAME)
+    arcpy.CopyRows_management(SEGMENT_ERROR_TABLE_NAME, out_gdb + os.sep + SEGMENT_ERROR_TABLE_NAME)
+    arcpy.CopyRows_management(ERROR_SUMMARY_TABLE_NAME, out_gdb + os.sep + ERROR_SUMMARY_TABLE_NAME)
+
+    arcpy.Delete_management(IN_MEMORY)
+
     arcpy.ResetProgressor()
 
 if __name__ == '__main__':
