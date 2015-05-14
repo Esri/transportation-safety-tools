@@ -997,7 +997,7 @@ def main():
     min_avg_crashes = arcpy.GetParameter(7)
     per_of_segments = arcpy.GetParameter(8)
 
-    output_folder = arcpy.GetParameterAsText(9)
+    output_folder = arcpy.GetParameterAsText(9)    
 
 #------------------- Assigning Segmemnt IDs to Crashes ------------------------#
 #------------------- and crash count to Segments ------------------------------#
@@ -1024,15 +1024,15 @@ def main():
     arcpy.SetProgressor("step", "Merging segments..", 0, steps,
                         SEGMENT_INCREMENT)
     try:
-
-        arcpy.CopyFeatures_management(IN_MEMORY + os.sep + SEGMENT_OUTPUT_NAME, output_folder + os.sep + OUTPUT_GDB_NAME + os.sep + SEGMENT_OUTPUT_NAME)
-        sorted_segments = arcpy.Sort_management(output_folder + os.sep + OUTPUT_GDB_NAME + os.sep + SEGMENT_OUTPUT_NAME, 
-            os.path.join(IN_MEMORY, "sorted_segments"),
-            [["SHAPE_Length", "ASCENDING"]])
+        temp_seg = output_folder + os.sep + OUTPUT_GDB_NAME + os.sep + SEGMENT_OUTPUT_NAME
+        arcpy.CopyFeatures_management(IN_MEMORY + os.sep + SEGMENT_OUTPUT_NAME, temp_seg)
+        arcpy.RepairGeometry_management(temp_seg)
+        sorted_segments = arcpy.Sort_management(temp_seg, os.path.join(IN_MEMORY, "sorted_segments"),
+                                                [["SHAPE_Length", "ASCENDING"]])
         sorted_features_layer = arcpy.MakeFeatureLayer_management(
             sorted_segments, "sorted_features_layer")
         #   Delete the previous Segment Feature Class as it is no longer needed
-        arcpy.Delete_management(output_folder + os.sep + OUTPUT_GDB_NAME + os.sep + SEGMENT_OUTPUT_NAME)
+        arcpy.Delete_management(temp_seg)
 
         #   Sequence of fields in check_fields is very important.
         #   If more fields need to be checked, add it after "COUNTY_FIELD_NAME"
