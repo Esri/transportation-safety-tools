@@ -1143,7 +1143,7 @@ def main():
         del ftrclass_route, ftrclass_county, ftrclass_access_control, ftrclass_median, ftrclass_travel_lanes
         del ftrclass_area_type, ftrclass_speed_limit
         del aadt_clipped, baseline_selected, baseline_values, c, check_list, county_geom, cursor,fc_baseline,field, fields, full_out_path
-        del problem_field_key, problem_fields, update_cur, update_cursor, value_set, shape_field_name
+        del problem_fields, update_cur, update_cursor, value_set, shape_field_name
 
         if len(ftrclass_aadt_multi_layers) > 0:
             for ftr in ftrclass_aadt_multi_layers:
