@@ -221,6 +221,7 @@ def assign_crashes_to_segments(input_segment_fc, crash_years, crash_year_field):
                         for per_num in xrange(10, 110, 10)]
         perc = 10
 
+        #TODO this section needs to speed up! are only USRAP sections reviewed..make sure!
         with arcpy.da.SearchCursor(CRASH_OUTPUT_NAME,
                                    [SEGMENTID_FIELD_NAME, crash_year_field], SEGMENTID_FIELD_NAME + " IS NOT NULL AND " + crash_year_field + " IS NOT NULL")\
                                    as crash_cursor:
@@ -394,7 +395,7 @@ def check_criteria(sorted_features_layer, conditions, criterias, check_fields, s
             add_message("-" * 80)
             step_count = 1
             usrap_where = "{0} = 'YES'".format(USRAP_SEGMENT_FIELD_NAME)
-            arcpy.RepairGeometry_management(sorted_features_layer)
+            #arcpy.RepairGeometry_management(sorted_features_layer)
             flds=[f.name for f in arcpy.ListFields(sorted_features_layer)]
             arcpy.DeleteIdentical_management(sorted_features_layer,flds)
 
@@ -1122,4 +1123,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

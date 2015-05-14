@@ -6,6 +6,7 @@ import os
 arcpy.env.overwriteOutput = True
 
 IN_MEMORY = 'in_memory'
+TEMP_GDB = "TEMP_INPUTS_BASIC_SEG.gdb"
 
 # feild names
 USRAP_COUNTY = 'USRAP_COUNTY'
@@ -181,6 +182,7 @@ def identity(target_ftrs, identity_ftrs, output_name=None, output_folder=None, c
     """ perform identity analysis on target feature class with identity
         feature class """
     try:
+        #This logic doesn't work anymore after by county and in_memory changes...will rethink
         #if len(problem_fields) > 0:
         #    for k in problem_fields.keys():
         #        if os.path.basename(str(target_ftrs)).find(str(os.path.basename(k))) > -1:
@@ -207,8 +209,7 @@ def identity(target_ftrs, identity_ftrs, output_name=None, output_folder=None, c
                 feature_name = output_name
             # convert multiparts to single part, if any
             return out_ftrs
-        else:
-            return target_ftrs
+        return target_ftrs
     except Exception as e:
         arcpy.AddError(str(e))
 
@@ -628,13 +629,22 @@ def merge_segments(update_row, update_cursor, fields, feature_class, condition):
                                 sort = sorted([pre_val, cur_val])
                                 avg_aadt.append(fields.index(tup[0]))
                                 # get length of segments
-                                update_row_length = update_row[-1].getLength()
-                                current_row_length = current[-1].getLength()
+                                if update_row != None:
+                                    update_row_length = update_row[-1].getLength()
+                                else:
+                                    update_row_length = 0
+
+                                if current[-1] != None:
+                                    current_row_length = current[-1].getLength()
+                                else:
+                                    current_row_length = 0
+
                                 if sort[0] == 0 or None in sort:
                                     truth_table.append(sort[1] <= tup[2])
                                 else:
                                     percent_val = ((sort[1]-sort[0])/sort[0]) * 100
                                     truth_table.append(percent_val <= tup[2])
+
                                 if pre_val == None and cur_val != None:
                                     pre_val = 0
                                 elif cur_val == None and pre_val != None:
@@ -643,12 +653,15 @@ def merge_segments(update_row, update_cursor, fields, feature_class, condition):
                                     weighted_avrg = None
                                 else:
                                     # calculate weighted average
-                                    weighted_avrg = (((pre_val*update_row_length) +
-                                                      (cur_val*current_row_length))/
-                                                     (update_row_length +
-                                                      current_row_length))
-                                    weighted_avrg = round(weighted_avrg, 1)
-                                avg_aadt.append(weighted_avrg)
+                                    if (update_row_length + current_row_length) > 0:
+                                        weighted_avrg = (((pre_val*update_row_length) +
+			                                        (cur_val*current_row_length))/
+			                                        (update_row_length +
+			                                        current_row_length))
+                                        weighted_avrg = round(weighted_avrg, 1)
+                                    else:
+                                        weighted_avrg = 0
+                                    avg_aadt.append(weighted_avrg)
                                 continue
                             else:
                                 truth_table.append(float(pre_val) <= tup[2] and
@@ -667,6 +680,7 @@ def merge_segments(update_row, update_cursor, fields, feature_class, condition):
 
                     # proceed to merge geometry when all conditions are satisfied
                     if not False in truth_table:
+                        #TODO look at adding current != update here if necessary
                         if(update_row[0] not in DELETE_OIDS):
                             try:
                                 update_row[avg_aadt[0]] = avg_aadt[1]                               
@@ -704,7 +718,7 @@ def merge_segments(update_row, update_cursor, fields, feature_class, condition):
 def add_segids(feature_class, field_name):
     """ add unique id to USRAP_SEGID in usrap feature class  """
     try:
-        where = "{0} <> 'NO'".format(USRAP_SEGMENT)
+        where = "{0} = 'YES'".format(USRAP_SEGMENT)
         arcpy.SelectLayerByAttribute_management(feature_class,
                                                 'CLEAR_SELECTION')
         arcpy.SelectLayerByAttribute_management(feature_class, "NEW_SELECTION", where)
@@ -780,11 +794,15 @@ def combine_values(baseline_selected, value_set, cluster_tolerance, problem_fiel
         else:
             sp = baseline_selected[0] + "sp"
         arcpy.MultipartToSinglepart_management(baseline_selected, sp)
-        arcpy.RepairGeometry_management(sp)
+        
+        #had to remove for 10.2 bug
+        #arcpy.RepairGeometry_management(sp)
 
         clipped = IN_MEMORY + os.sep + os.path.basename(values[0]) + "Clip"
         arcpy.Clip_analysis(values[0], county_geom, clipped)
-        arcpy.RepairGeometry_management(clipped)
+        
+        #had to remove for 10.2 bug
+        #arcpy.RepairGeometry_management(clipped)
 
         baseline_selected = combine_attributes(sp,
                                     clipped,
@@ -795,11 +813,31 @@ def combine_values(baseline_selected, value_set, cluster_tolerance, problem_fiel
                                     cluster_tolerance,
                                     problem_fields, full_out_path, values[0])
 
+        arcpy.Delete_management(clipped)
+        if baseline_selected != sp:
+            arcpy.Delete_management(sp)
+        
         check_list.append(values[2])
 
-        arcpy.DeleteIdentical_management(baseline_selected, check_list)
+        if arcpy.Exists(baseline_selected):
+            arcpy.DeleteIdentical_management(baseline_selected, check_list)
 
-    return baseline_selected       
+    return baseline_selected  
+
+def repair_temp_data(out_temp_gdb, in_data):
+    """ This function works around 2 issues at 10.2...not necessary at later releases """
+    """ 1) RepairGeometry fails on datasets in in_memory workspaces """
+    """ 2) Clip fails on z enabled line features when none of the line features intersect the clip geometry """
+    out_temp_fc = os.path.join(out_temp_gdb, "temp_" + os.path.basename(in_data))
+    arcpy.env.outputMFlag = 'Disabled'
+    arcpy.env.outputZFlag = 'Disabled'
+    arcpy.CopyFeatures_management(in_data, out_temp_fc)  
+    try:
+        arcpy.RepairGeometry_management(out_temp_fc)
+    except:
+        arcpy.AddWarning("Repair Geometry failed on " + str(out_temp_fc))
+        pass
+    return out_temp_fc
 
 def main():
     """ main function """
@@ -824,6 +862,31 @@ def main():
     field_aadt_multi_layers_value = arcpy.GetParameterAsText(17)
     output_folder = arcpy.GetParameterAsText(18)
     cluster_tolerance = arcpy.GetParameterAsText(19)
+
+    #Create temp gdb to store all value classes
+    # this is to work around issue with RepairGeometry not working 
+    # against in_memory datasets at 10.2
+    if not os.path.exists(os.path.join(output_folder, TEMP_GDB)):
+        # create file geodatabase at output location, if not present
+        arcpy.CreateFileGDB_management(output_folder, TEMP_GDB)
+    out_temp_gdb = os.path.join(output_folder, TEMP_GDB)
+
+    ftrclass_route = repair_temp_data(out_temp_gdb, ftrclass_route)
+    ftrclass_county = repair_temp_data(out_temp_gdb, ftrclass_county)
+    ftrclass_access_control = repair_temp_data(out_temp_gdb, ftrclass_access_control)
+    ftrclass_median = repair_temp_data(out_temp_gdb, ftrclass_median)
+    ftrclass_travel_lanes = repair_temp_data(out_temp_gdb, ftrclass_travel_lanes)
+    ftrclass_area_type = repair_temp_data(out_temp_gdb, ftrclass_area_type)
+    ftrclass_speed_limit = repair_temp_data(out_temp_gdb, ftrclass_speed_limit)
+
+    t=[]
+    if len(ftrclass_aadt_multi_layers) > 0:
+        for ftr in ftrclass_aadt_multi_layers:
+            t.append(repair_temp_data(out_temp_gdb, ftr.value))
+            #t.append(repair_temp_data(out_temp_gdb, ftr))
+
+    ftrclass_aadt_multi_layers = t
+    del t
 
     full_out_path = output_folder + os.sep + OUTPUT_GDB_NAME + os.sep + OUTPUT_SEGMENT_NAME
     key_fields = {ftrclass_route : [field_route_name, field_route_type],
@@ -921,19 +984,21 @@ def main():
                 county_name = str(row[0])
                 county_geom = row[1]
                 add_message("Processing " + county_name + " County")
-
+                arcpy.AddMessage("Processing " + county_name + " County")
                 if " " in county_name:
                     county_name = county_name.replace(" ","_")
 
                 routes = IN_MEMORY + "\\clip" + county_name + "routes"
-
+                #routes = "{0}\\clip{1}routes".format(IN_MEMORY, county_name)
+                        
                 arcpy.Clip_analysis(baseline_selected, county_geom, routes)
 
+                #TODO should do this for all FCs
                 for problem_field_key in problem_fields.keys():
                     if problem_field_key == ftrclass_route:
                         arcpy.DeleteField_management(routes, problem_fields[problem_field_key])
 
-                c=arcpy.GetCount_management(routes)
+                c = arcpy.GetCount_management(routes)
                 add_message("   " + str(c[0]) + " routes in: " + county_name)
 
                 if int(c[0]) > 0:
@@ -951,30 +1016,35 @@ def main():
                         check_list = [shape_field_name]
                         new_fields = []
                         for ftr in ftrclass_aadt_multi_layers:
-                            new_field = USRAP_AADT_YYYY + '_' + os.path.basename(ftr.value)[-4:]
+                            new_field = USRAP_AADT_YYYY + '_' + os.path.basename(ftr)[-4:]
                             new_fields.append(new_field)
                             seg_name = None
                             out_gdb = None
 
-                            aadt_clipped = IN_MEMORY + "\\clip" + county_name + "aadt" + os.path.basename(ftr.value)[-4:]
+                            aadt_clipped = IN_MEMORY + "\\clip" + county_name + "aadt" + os.path.basename(ftr)[-4:]
 
-                            arcpy.Clip_analysis(ftr.value, county_geom, aadt_clipped)
-                            arcpy.RepairGeometry_management(aadt_clipped)
+                            arcpy.Clip_analysis(ftr, county_geom, aadt_clipped)
+                            #arcpy.RepairGeometry_management(aadt_clipped)
 
                             routes = combine_attributes(routes,
                                                                    aadt_clipped,\
                                                             field_aadt_multi_layers_value,
                                                                    new_field,
                                                                    seg_name,
-                                                                   out_gdb, cluster_tolerance, problem_fields, full_out_path, ftr.value)
+                                                                   out_gdb, cluster_tolerance, problem_fields, full_out_path, ftr)
 
                             check_list.append(new_field)
-                            arcpy.DeleteIdentical_management(routes, check_list)
+
+                            #TODO whats with the mix of routes and baseline...i forget
+                            if arcpy.Exists(baseline_selected):
+                                arcpy.DeleteIdentical_management(routes, check_list)
+                            else:
+                                arcpy.AddMessage(str(routes) + " DOES NOT EXIST")
+
+                            arcpy.Delete_management(aadt_clipped)
 
                         # calculate the average of all supplied years of AADT
-                        routes = calculate_average(routes,
-                                                              new_fields,
-                                                              USRAP_AVG_AADT)
+                        routes = calculate_average(routes, new_fields, USRAP_AVG_AADT)
 
                     # baseline segment will be identified as usrap segment
                     routes = identify_usrap_segment(routes, roadway_type, output_folder)
@@ -1003,7 +1073,7 @@ def main():
 
                     global DELETE_OIDS
 
-                    where = "{0} <> 'NO'".format(USRAP_SEGMENT)
+                    where = "{0} = 'YES'".format(USRAP_SEGMENT)
                     with arcpy.da.UpdateCursor(layer, fields, where) as update_cursor:
                         for row in update_cursor:
                             if '' in row:
@@ -1051,7 +1121,7 @@ def main():
             arcpy.Append_management(baseline_invert_selected, baseline_selected,
                                     'NO_TEST')
         #Assign unique segIDs
-        where = "{0} <> 'NO'".format(USRAP_SEGMENT)
+        where = "{0} = 'YES'".format(USRAP_SEGMENT)
         l = arcpy.MakeFeatureLayer_management(full_out_path, "FINAL_OUTPUT_SEGMENTS")
         arcpy.SelectLayerByAttribute_management(str(l[0]),'CLEAR_SELECTION')
         arcpy.SelectLayerByAttribute_management(str(l[0]), "NEW_SELECTION", where)
@@ -1066,6 +1136,8 @@ def main():
                                         'CLEAR_SELECTION')
         arcpy.Delete_management(str(l[0]))
 
+        arcpy.RepairGeometry_management(full_out_path)
+
         arcpy.SetProgressorPosition()
     except Exception as e:
         arcpy.AddError(str(e))
@@ -1073,6 +1145,8 @@ def main():
     finally:
         # ensure the in_memory workspace is cleared to free up memory
         arcpy.Delete_management("in_memory")
+        if arcpy.Exists(output_folder + os.sep + TEMP_GDB):
+            arcpy.Delete_management(output_folder + os.sep + TEMP_GDB)
         arcpy.ResetProgressor()
 
 if __name__ == '__main__':
