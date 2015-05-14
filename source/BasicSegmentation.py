@@ -681,15 +681,17 @@ def merge_segments(update_row, update_cursor, fields, feature_class, condition):
                     # proceed to merge geometry when all conditions are satisfied
                     if not False in truth_table:
                         #TODO look at adding current != update here if necessary
-                        if(update_row[0] not in DELETE_OIDS):
+                        if(update_row[0] not in DELETE_OIDS and update_row[0] != current[0]):
                             try:
                                 update_row[avg_aadt[0]] = avg_aadt[1]                               
                                 update_row[-1] = update_row[-1].union(current[-1])
 
                                 update_cursor.updateRow(update_row)
    
-                                OID_merged.append(current[0])
-                                DELETE_OIDS.append(current[0])
+                                if current[0] not in OID_merged:
+                                    OID_merged.append(current[0])
+                                if current[0] not in DELETE_OIDS:
+                                    DELETE_OIDS.append(current[0])
 
                             except Exception, re:
                                 msg = "Merge failed for ObjectId {0} and {1}".format(\
@@ -822,7 +824,7 @@ def combine_values(baseline_selected, value_set, cluster_tolerance, problem_fiel
         if arcpy.Exists(baseline_selected):
             arcpy.DeleteIdentical_management(baseline_selected, check_list)
 
-    return baseline_selected  
+    return baseline_selected, check_list
 
 def repair_temp_data(out_temp_gdb, in_data):
     """ This function works around 2 issues at 10.2...not necessary at later releases """
@@ -1008,12 +1010,11 @@ def main():
                                  [ftrclass_travel_lanes, field_travel_lanes_info, USRAP_LANES],
                                  [ftrclass_area_type, field_area_type_info, USRAP_AREA_TYPE],
                                  [ftrclass_speed_limit, field_speed_limit_info, USRAP_SPEED_LIMIT]]
-                    routes = combine_values(routes, value_set, cluster_tolerance, problem_fields, county_geom, full_out_path)
+                    routes, check_list = combine_values(routes, value_set, cluster_tolerance, problem_fields, county_geom, full_out_path)
 
                     if len(ftrclass_aadt_multi_layers) > 0:
                         # combine attributes of identity result and AADT
                         shape_field_name = arcpy.Describe(routes).shapeFieldName
-                        check_list = [shape_field_name]
                         new_fields = []
                         for ftr in ftrclass_aadt_multi_layers:
                             new_field = USRAP_AADT_YYYY + '_' + os.path.basename(ftr)[-4:]
@@ -1082,6 +1083,10 @@ def main():
 
                             numfeatures = merge_segments(row, update_cursor, fields,
                                                          layer, condition)
+                            
+
+                            arcpy.DeleteIdentical_management(full_out_path, check_list)
+
                             if len(DELETE_OIDS) > 0:
                                 stepper += (len(DELETE_OIDS)*2)
                             else:
@@ -1138,16 +1143,30 @@ def main():
 
         arcpy.RepairGeometry_management(full_out_path)
 
+        arcpy.DeleteIdentical_management(full_out_path, check_list)
+
+        del ftrclass_route, ftrclass_county, ftrclass_access_control, ftrclass_median, ftrclass_travel_lanes
+        del ftrclass_area_type, ftrclass_speed_limit
+        del aadt_clipped, baseline_selected, baseline_values, c, check_list, county_geom, cursor,fc_baseline,field, fields, full_out_path
+        del problem_field_key, problem_fields, update_cur, update_cursor, value_set, shape_field_name
+
+        if len(ftrclass_aadt_multi_layers) > 0:
+            for ftr in ftrclass_aadt_multi_layers:
+                del ftr
+        del ftrclass_aadt_multi_layers
+
+        arcpy.Delete_management(out_temp_gdb)
+
         arcpy.SetProgressorPosition()
     except Exception as e:
         arcpy.AddError(str(e))
         print e
     finally:
         # ensure the in_memory workspace is cleared to free up memory
-        arcpy.Delete_management("in_memory")
-        if arcpy.Exists(output_folder + os.sep + TEMP_GDB):
-            arcpy.Delete_management(output_folder + os.sep + TEMP_GDB)
-        arcpy.ResetProgressor()
+        arcpy.Delete_management(IN_MEMORY)
+        if arcpy.Exists(out_temp_gdb):
+            arcpy.Delete_management(out_temp_gdb)
+            del out_temp_gdb
 
 if __name__ == '__main__':
     main()
