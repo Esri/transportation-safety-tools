@@ -986,7 +986,6 @@ def main():
                 county_name = str(row[0])
                 county_geom = row[1]
                 add_message("Processing " + county_name + " County")
-                arcpy.AddMessage("Processing " + county_name + " County")
                 if " " in county_name:
                     county_name = county_name.replace(" ","_")
 
@@ -1083,9 +1082,6 @@ def main():
 
                             numfeatures = merge_segments(row, update_cursor, fields,
                                                          layer, condition)
-                            
-
-                            arcpy.DeleteIdentical_management(full_out_path, check_list)
 
                             if len(DELETE_OIDS) > 0:
                                 stepper += (len(DELETE_OIDS)*2)
