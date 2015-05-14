@@ -680,6 +680,7 @@ def merge_segments(update_row, update_cursor, fields, feature_class, condition):
 
                     # proceed to merge geometry when all conditions are satisfied
                     if not False in truth_table:
+                        #TODO look at adding current != update here if necessary
                         if(update_row[0] not in DELETE_OIDS):
                             try:
                                 update_row[avg_aadt[0]] = avg_aadt[1]                               
@@ -687,10 +688,8 @@ def merge_segments(update_row, update_cursor, fields, feature_class, condition):
 
                                 update_cursor.updateRow(update_row)
    
-                                if current[0] not in OID_merged:
-                                    OID_merged.append(current[0])
-                                if current[0] not in DELETE_OIDS:
-                                    DELETE_OIDS.append(current[0])
+                                OID_merged.append(current[0])
+                                DELETE_OIDS.append(current[0])
 
                             except Exception, re:
                                 msg = "Merge failed for ObjectId {0} and {1}".format(\
@@ -823,7 +822,7 @@ def combine_values(baseline_selected, value_set, cluster_tolerance, problem_fiel
         if arcpy.Exists(baseline_selected):
             arcpy.DeleteIdentical_management(baseline_selected, check_list)
 
-    return baseline_selected, check_list
+    return baseline_selected  
 
 def repair_temp_data(out_temp_gdb, in_data):
     """ This function works around 2 issues at 10.2...not necessary at later releases """
@@ -1008,11 +1007,12 @@ def main():
                                  [ftrclass_travel_lanes, field_travel_lanes_info, USRAP_LANES],
                                  [ftrclass_area_type, field_area_type_info, USRAP_AREA_TYPE],
                                  [ftrclass_speed_limit, field_speed_limit_info, USRAP_SPEED_LIMIT]]
-                    routes, check_list = combine_values(routes, value_set, cluster_tolerance, problem_fields, county_geom, full_out_path)
+                    routes = combine_values(routes, value_set, cluster_tolerance, problem_fields, county_geom, full_out_path)
 
                     if len(ftrclass_aadt_multi_layers) > 0:
                         # combine attributes of identity result and AADT
                         shape_field_name = arcpy.Describe(routes).shapeFieldName
+                        check_list = [shape_field_name]
                         new_fields = []
                         for ftr in ftrclass_aadt_multi_layers:
                             new_field = USRAP_AADT_YYYY + '_' + os.path.basename(ftr)[-4:]
@@ -1081,7 +1081,6 @@ def main():
 
                             numfeatures = merge_segments(row, update_cursor, fields,
                                                          layer, condition)
-
                             if len(DELETE_OIDS) > 0:
                                 stepper += (len(DELETE_OIDS)*2)
                             else:

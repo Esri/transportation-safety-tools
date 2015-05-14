@@ -997,7 +997,7 @@ def main():
     min_avg_crashes = arcpy.GetParameter(7)
     per_of_segments = arcpy.GetParameter(8)
 
-    output_folder = arcpy.GetParameterAsText(9)    
+    output_folder = arcpy.GetParameterAsText(9)
 
 #------------------- Assigning Segmemnt IDs to Crashes ------------------------#
 #------------------- and crash count to Segments ------------------------------#
