@@ -680,8 +680,7 @@ def merge_segments(update_row, update_cursor, fields, feature_class, condition):
 
                     # proceed to merge geometry when all conditions are satisfied
                     if not False in truth_table:
-                        #TODO look at adding current != update here if necessary
-                        if(update_row[0] not in DELETE_OIDS and update_row[0] != current[0]):
+                        if(update_row[0] not in DELETE_OIDS):
                             try:
                                 update_row[avg_aadt[0]] = avg_aadt[1]                               
                                 update_row[-1] = update_row[-1].union(current[-1])
