@@ -133,8 +133,8 @@ def get_workspace(feature_class):
 
 def get_domain_values(workspace, domain_name):
     """ takes gdb and domain name as input and return domain value dictinary """
-    return (domain.codedValues for domain in arcpy.da.ListDomains(workspace)
-            if domain.name == domain_name).next()
+    return next((domain.codedValues for domain in arcpy.da.ListDomains(workspace)
+            if domain.name == domain_name))
 
 def get_field_values(feature_class, field_name):
     """ takes feature class and field object as input
@@ -145,8 +145,8 @@ def get_field_values(feature_class, field_name):
 def get_field_object(feature_class, field_name):
     """ takes feature class and field name as input and
         return field object for the given field name"""
-    return (field for field in arcpy.Describe(feature_class).fields
-            if field.name == field_name).next()
+    return next((field for field in arcpy.Describe(feature_class).fields
+            if field.name == field_name))
 
 def disable_m_value(feature_class):
     """ Disable M value of feature class """
@@ -250,8 +250,8 @@ def calculate_average(feature_class, existing_fields, new_field):
                     forwardTest = True
                     i=0
                     while i < len(row[:-1]):
-                        mid = median(field_order.values(),testIndex)
-                        value = row[field_order.keys()[field_order.values().index(mid)]]
+                        mid = median(list(field_order.values()),testIndex)
+                        value = row[list(field_order.keys())[list(field_order.values()).index(mid)]]
 
                         if value != None and value != 0:
                             row[-1] = value
@@ -280,7 +280,7 @@ def copy_fields(feature_class, fields_name_info, fc_source):
         domain_lu = None
         field_type = None
         update_rows = True
-        for existing_field, new_field in fields_name_info.items():
+        for existing_field, new_field in list(fields_name_info.items()):
             # get the field object of existing field in baseline feature class
             field = get_field_object(fc_source, existing_field)
             if field.domain:
@@ -414,7 +414,7 @@ def combine_attributes(fc_target, fc_identity, fc_identity_field_name,
         arcpy.SetProgressorPosition()
         arcpy.AddError(str(e))
 
-def identify_usrap_segment(feature_class, roadway_types, output_folder):
+def identify_usrap_segment(feature_class, roadway_types, output_folder, field_route_name):
     """ create new field 'USRAP_SEGMENT' and assign 'YES' or 'NO' value
         according to roadway type """
 
@@ -426,6 +426,7 @@ def identify_usrap_segment(feature_class, roadway_types, output_folder):
     fields.append(USRAP_SPEED_LIMIT)
     fields.append(USRAP_CLASS_ERROR)
     fields.append(USRAP_COUNTY)
+    fields.append(field_route_name)
     fields.append("OID@")
     # create new field to identify USRAP Segments
     arcpy.AddField_management(feature_class, USRAP_SEGMENT, 'TEXT',
@@ -513,6 +514,11 @@ def identify_usrap_segment(feature_class, roadway_types, output_folder):
                 if row[fields.index(USRAP_AVG_AADT)] in ["", " ", None, "0", 0]:
                     errors[USRAP_AVG_AADT] = False 
                     truth_table.append(False)
+
+                #verify we have a value for ROUTE_NAME
+                if row[fields.index(field_route_name)] in ["", " ", None, "0", 0]:
+                    errors[field_route_name] = False 
+                    truth_table.append(False)
                    
                 if False not in truth_table:
                     # mark segment as usrap segment 'YES' if it fulfill the
@@ -533,6 +539,7 @@ def identify_usrap_segment(feature_class, roadway_types, output_folder):
                 has_median = True
                 has_lanes = True
                 has_area_type = True
+                has_name = True
                 for field in errors.keys():
                     if str(errors[field]) != 'True':
                         allTrue = False
@@ -550,6 +557,8 @@ def identify_usrap_segment(feature_class, roadway_types, output_folder):
                             has_area_type = False
                         if str(field) == USRAP_SPEED_LIMIT:
                             has_speed = False
+                        if str(field) == field_route_name:
+                            has_name = False
 
                 error_message = ""
                 error_messages = []
@@ -571,6 +580,8 @@ def identify_usrap_segment(feature_class, roadway_types, output_folder):
                         error_messages.append("Lanes")
                     if not has_area_type:
                         error_messages.append("Area Type")   
+                    if not has_name:
+                        error_messages.append("Route Name")
                 
                 if len(error_messages) > 1:
                     error_message = "Missing " + (' AND '.join(error_messages)) + " values"
@@ -606,7 +617,9 @@ def merge_segments(update_row, update_cursor, fields, feature_class, condition):
                 for current in cursor:
                     if '' in current:
                         continue
-
+                    touches = update_row[-1].touches(current[-1])
+                    if touches == False:
+                        continue
                     # truth_table contains boolean value for each condition
                     truth_table = []
                     avg_aadt = []
@@ -691,7 +704,7 @@ def merge_segments(update_row, update_cursor, fields, feature_class, condition):
                                 OID_merged.append(current[0])
                                 DELETE_OIDS.append(current[0])
 
-                            except Exception, re:
+                            except Exception as re:
                                 msg = "Merge failed for ObjectId {0} and {1}".format(\
                                         update_row[0], current[0])
                                 arcpy.AddWarning(msg)
@@ -800,12 +813,15 @@ def combine_values(baseline_selected, value_set, cluster_tolerance, problem_fiel
 
         clipped = IN_MEMORY + os.sep + os.path.basename(values[0]) + "Clip"
         arcpy.Clip_analysis(values[0], county_geom, clipped)
+
+        clipped_sp = clipped + "sp"
+        arcpy.MultipartToSinglepart_management(clipped, clipped_sp)
         
         #had to remove for 10.2 bug
         #arcpy.RepairGeometry_management(clipped)
 
         baseline_selected = combine_attributes(sp,
-                                    clipped,
+                                    clipped_sp,
                                     values[1],
                                     values[2],
                                     None,
@@ -841,7 +857,7 @@ def repair_temp_data(out_temp_gdb, in_data):
 
 def main():
     """ main function """
-    # Basic segmentation tool's inputs (arranged in accending order)
+    #Basic segmentation tool's inputs (arranged in accending order)
     ftrclass_route = arcpy.GetParameterAsText(0)
     field_route_name = arcpy.GetParameterAsText(1)
     field_route_type = arcpy.GetParameterAsText(2)
@@ -1046,7 +1062,7 @@ def main():
                         routes = calculate_average(routes, new_fields, USRAP_AVG_AADT)
 
                     # baseline segment will be identified as usrap segment
-                    routes = identify_usrap_segment(routes, roadway_type, output_folder)
+                    routes = identify_usrap_segment(routes, roadway_type, output_folder, field_route_name)
 
                     # delete duplicate records
                     fields = [f.name for f in arcpy.ListFields(routes)
@@ -1099,7 +1115,8 @@ def main():
                     msg = "   Assigning USRAP_SEGID to segments"
                     arcpy.AddMessage(msg)
                     arcpy.SetProgressor('step', msg, 0, 2, 1)
-                    routes = add_segids(layer, USRAP_SEGID)
+
+                    routes = add_segids('layer', USRAP_SEGID)
                     arcpy.SetProgressorPosition()
 
                 existing_fields = [field.name for field in arcpy.Describe(full_out_path).fields]
@@ -1107,8 +1124,40 @@ def main():
 
                 for field in new_fields:
                     arcpy.AddField_management(full_out_path, field.name,field.type)
-               
-                arcpy.Append_management(routes, full_out_path, "NO_TEST")
+             
+
+                oid_field_name = arcpy.Describe(routes).oidFieldName;
+                shp_field_name = arcpy.Describe(routes).shapeFieldName;
+                route_fields = [field.name for field in arcpy.ListFields(routes) if field.name != oid_field_name and field.name != shp_field_name]
+                route_fields.append("SHAPE@")
+
+                oid_field_name = arcpy.Describe(full_out_path).oidFieldName;
+                shp_field_name = arcpy.Describe(full_out_path).shapeFieldName;
+                out_fields = [field.name for field in arcpy.ListFields(full_out_path) if field.name != oid_field_name and field.name != shp_field_name]
+                out_fields.append("SHAPE@")
+
+                #can get around the append thing with this but loose
+                # all of the inital field values 
+                with arcpy.da.SearchCursor(routes, route_fields) as ser_cur:
+                    with arcpy.da.InsertCursor(full_out_path, out_fields) as in_cur:
+                        for row in ser_cur:
+                            new_row = []
+                            used_indexes = []
+                            for field in route_fields:
+                                if out_fields.index(field) > -1:
+                                    used_indexes.append(out_fields.index(field))
+                                    new_row.insert(out_fields.index(field), row[route_fields.index(field)])
+                            if len(new_row) != len(out_fields):
+                                x=0
+                                while x < len(out_fields):
+                                    if x not in used_indexes:
+                                        new_row.insert(x, None)
+                                    x+=1
+                            in_cur.insertRow(new_row)
+
+                #THIS ONLY INSERTS THE FIRST CHARACTER FROM STRING FIELDS WITH PY 3 
+                # FOR SOME REASON and thus replaced with the above cursors
+                #arcpy.Append_management(routes, full_out_path, "NO_TEST")
                 arcpy.Delete_management("in_memory")
 
         # copy the rest of data when partial road types are selected for
@@ -1154,7 +1203,7 @@ def main():
         arcpy.SetProgressorPosition()
     except Exception as e:
         arcpy.AddError(str(e))
-        print e
+        print(e)
     finally:
         # ensure the in_memory workspace is cleared to free up memory
         arcpy.Delete_management(IN_MEMORY)

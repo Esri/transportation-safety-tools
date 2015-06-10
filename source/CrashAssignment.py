@@ -218,7 +218,7 @@ def assign_crashes_to_segments(input_segment_fc, crash_years, crash_year_field):
         #   for specified year
         row_count = 0
         per_val_list = [int(round((c_count * per_num) / 100))
-                        for per_num in xrange(10, 110, 10)]
+                        for per_num in range(10, 110, 10)]
         perc = 10
 
         #TODO this section needs to speed up! are only USRAP sections reviewed..make sure!
@@ -286,7 +286,7 @@ def caluculate_sum_avg_field(crash_years):
             for row in update_cursor:
                 total_count = 0
                 num_div_years = 0
-                for i in xrange(len(crash_years)):
+                for i in range(len(crash_years)):
                     total_count += row[i]
                     num_div_years += 1
                 if total_count == 0:
@@ -561,6 +561,10 @@ def union_segments(sorted_features_layer, check_fields, aadt_check, step_count,
                 arcpy.SelectLayerByLocation_management(sorted_features_layer, "BOUNDARY_TOUCHES", row[-1], selection_type="SUBSET_SELECTION")
                 with arcpy.da.SearchCursor(sorted_features_layer, check_fields) as search_cursor:
                     for search_row in search_cursor:
+                        touches = rpw[-1].touches(search_row[-1])
+                        if touches == False:
+                            continue
+
                         #get values from source feature
                         county_1 = row[check_fields.index(COUNTY_FIELD_NAME)]
                         road_name_1 = row[check_fields.index(segment_route_name_field)]
@@ -753,12 +757,12 @@ def get_segment_error(min_avg_crashes, full_out_path):
                                     AVG_CRASHES_FIELD_NAME],
                                    where) as segment_cursor:
             for segment_row in segment_cursor:
-                if (int(segment_row[-2]) in xrange(0, 4) and
+                if (int(segment_row[-2]) in range(0, 4) and
                         segment_row[-2] <= 3):
                     error_msg = "Total crash <= 3"
                     per_of_segment += 1
                 elif (int(avg_check) > 3 and
-                        int(segment_row[-1]) in xrange(3, int(avg_check) + 1) and 
+                        int(segment_row[-1]) in range(3, int(avg_check) + 1) and 
                             segment_row[-1] <= int(avg_check)):
                     error_msg = "Average crash <= {0}".format(min_avg_crashes)
                     crash_per_seg += 1
@@ -1019,10 +1023,9 @@ def main():
     steps = usrap_count / SEGMENT_INCREMENT
     if usrap_count % SEGMENT_INCREMENT != 0:
         steps += 1
-    steps = (steps * 2) + 2
+    steps = int((steps * 2) + 2)
     arcpy.ResetProgressor()
-    arcpy.SetProgressor("step", "Merging segments..", 0, steps,
-                        SEGMENT_INCREMENT)
+    arcpy.SetProgressor("step", "Merging segments..", 0, steps, int(SEGMENT_INCREMENT))
     try:
         temp_seg = output_folder + os.sep + OUTPUT_GDB_NAME + os.sep + SEGMENT_OUTPUT_NAME
         arcpy.CopyFeatures_management(IN_MEMORY + os.sep + SEGMENT_OUTPUT_NAME, temp_seg)
@@ -1061,7 +1064,7 @@ def main():
                        ["min average", "per segments"],
                        check_fields, segment_route_name_field, crash_fields)
 
-        arcpy.SetProgressorPosition(steps - 1)
+        arcpy.SetProgressorPosition(int(steps) - 1)
         add_message("Merging of segments completed.")
 
         #   Clear the selection from the layer and copy it as new feature class
