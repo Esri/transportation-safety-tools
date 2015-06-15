@@ -1,4 +1,4 @@
-import arcpy
+import arcpy, os
 
 #existing fields expected from input segments
 USRAP_SEGMENT_FIELDNAME = "USRAP_SEGMENT"
@@ -200,7 +200,7 @@ def create_table(name, fields):
 #def assign_risk_levels():
     #need to understand this still
 def get_workspace(feature_class):
-    """ returns the workspace location of feature class """
+    """ returns the workspace for the feature class """
     if arcpy.Describe(os.path.dirname(feature_class)).dataType != 'Workspace':
         return get_workspace(os.path.dirname(feature_class))
     return os.path.dirname(feature_class)
