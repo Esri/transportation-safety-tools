@@ -296,12 +296,14 @@ def copy_fields(feature_class, fields_name_info, fc_source):
                 # field_length=50 from AddField_management
                 arcpy.AddField_management(feature_class, new_field, 'TEXT',
                                           field_alias=new_field)
-                if not [field.name for field in arcpy.Describe(feature_class).fields].count(existing_field) > 0:
-                    update_rows = False
             else:
                 # field_length=field.length,
                 arcpy.AddField_management(feature_class, new_field, field.type,
                                           field_alias=new_field)
+
+            if not [field.name for field in arcpy.Describe(feature_class).fields].count(existing_field) > 0:
+                update_rows = False
+
             if update_rows:
                 with arcpy.da.UpdateCursor(feature_class, [existing_field,
                                                            new_field]) as cursor:
@@ -1020,18 +1022,16 @@ def main():
                 county_name = str(row[0])
                 county_geom = row[1]
                 add_message("Processing " + county_name + " County")
-                if " " in county_name:
-                    county_name = county_name.replace(" ", "_")
+
+                county_name = str(arcpy.ValidateTableName(county_name, IN_MEMORY))
 
                 routes = IN_MEMORY + "\\clip" + county_name + "routes"
                 #routes = "{0}\\clip{1}routes".format(IN_MEMORY, county_name)
 
                 arcpy.Clip_analysis(baseline_selected, county_geom, routes)
 
-                #TODO should do this for all FCs
                 for problem_field_key in problem_fields.keys():
-                    if problem_field_key == ftrclass_route:
-                        arcpy.DeleteField_management(routes, problem_fields[problem_field_key])
+                    arcpy.DeleteField_management(problem_field_key, problem_fields[problem_field_key])
 
                 c = arcpy.GetCount_management(routes)
                 add_message("   " + str(c[0]) + " routes in: " + county_name)
