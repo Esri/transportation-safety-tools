@@ -206,6 +206,7 @@ def get_workspace(feature_class):
     return os.path.dirname(feature_class)
 
 def main():
+    ##segments = r"C:\Solutions\CrashTools\VDOT_Data\data_\CrashAssignmentOutput.gdb\SegmentOutput"
     segments = arcpy.GetParameterAsText(0)
 
     arcpy.env.workspace = get_workspace(segments)

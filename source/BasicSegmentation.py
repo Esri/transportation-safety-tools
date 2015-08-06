@@ -185,13 +185,6 @@ def identity(target_ftrs, identity_ftrs, output_name=None, output_folder=None, c
     """ perform identity analysis on target feature class with identity
         feature class """
     try:
-        #This logic doesn't work anymore after by county and in_memory changes...will rethink
-        #if len(problem_fields) > 0:
-        #    for k in problem_fields.keys():
-        #        if os.path.basename(str(target_ftrs)).find(str(os.path.basename(k))) > -1:
-        #            arcpy.DeleteField_management(target_ftrs, problem_fields[k])
-        #            del problem_fields[k]
-
         output_location = IN_MEMORY
         out_ftrs = os.path.basename(str(identity_ftrs))
         if output_folder:
@@ -819,7 +812,8 @@ def combine_values(baseline_selected, value_set, cluster_tolerance, problem_fiel
 
         if VERSION_USED != "10.2":
             arcpy.RepairGeometry_management(sp)
-            arcpy.AddSpatialIndex_management(sp)
+            #TODO...why did I comment this out
+            #arcpy.AddSpatialIndex_management(sp)
 
         clipped = IN_MEMORY + os.sep + os.path.basename(values[0]) + "Clip"
         arcpy.Clip_analysis(values[0], county_geom, clipped)
@@ -910,8 +904,8 @@ def main():
         t = []
         if len(ftrclass_aadt_multi_layers) > 0:
             for ftr in ftrclass_aadt_multi_layers:
-                #t.append(repair_temp_data(out_temp_gdb, ftr.value))
-                t.append(repair_temp_data(out_temp_gdb, ftr))
+                t.append(repair_temp_data(out_temp_gdb, ftr.value))
+                #t.append(repair_temp_data(out_temp_gdb, ftr))
 
         ftrclass_aadt_multi_layers = t
         del t
@@ -919,8 +913,8 @@ def main():
         t = []
         if len(ftrclass_aadt_multi_layers) > 0:
             for ftr in ftrclass_aadt_multi_layers:
-                #t.append(ftr.value)
-                t.append(ftr)
+                t.append(ftr.value)
+                #t.append(ftr)
 
         ftrclass_aadt_multi_layers = t
         del t
@@ -1026,8 +1020,7 @@ def main():
                 county_name = str(arcpy.ValidateTableName(county_name, IN_MEMORY))
 
                 routes = IN_MEMORY + "\\clip" + county_name + "routes"
-                #routes = "{0}\\clip{1}routes".format(IN_MEMORY, county_name)
-
+     
                 arcpy.Clip_analysis(baseline_selected, county_geom, routes)
 
                 for problem_field_key in problem_fields.keys():
