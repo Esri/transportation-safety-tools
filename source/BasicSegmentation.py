@@ -319,7 +319,7 @@ def combine_attributes(fc_target, fc_identity, fc_identity_field_name,
     """ combines the required fields from other feature classes with
         baseline feature class """
     try:
-        add_formatted_message("   Combining {0} into routes", fc_identity_field_name)
+        #add_formatted_message("   Combining {0} into routes", fc_identity_field_name)
 
         if arcpy.Describe(fc_target).hasM:
             fc_target = disable_m_value(fc_target)
@@ -1203,9 +1203,10 @@ def main():
 
         arcpy.AddSpatialIndex_management(full_out_path)
 
-        del ftrclass_route, ftrclass_county, ftrclass_access_control, ftrclass_median, ftrclass_travel_lanes
-        del ftrclass_area_type, ftrclass_speed_limit
-        del aadt_clipped, baseline_selected, baseline_values, c, check_list, county_geom, cursor, fc_baseline, field, fields, full_out_path
+        del ftrclass_route, ftrclass_county, ftrclass_access_control, ftrclass_median
+        del ftrclass_travel_lanes, ftrclass_area_type, ftrclass_speed_limit
+        del aadt_clipped, baseline_selected, baseline_values, c, check_list, 
+        del county_geom, cursor, fc_baseline, field, fields, full_out_path
         del problem_fields, update_cur, update_cursor, value_set, shape_field_name
 
         if len(ftrclass_aadt_multi_layers) > 0:
