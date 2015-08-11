@@ -1,4 +1,4 @@
-import arcpy, os, sys, decimal
+import arcpy, os, sys, decimal, time
 
 #existing fields expected from input segments
 USRAP_SEGMENT_FIELDNAME = "USRAP_SEGMENT"
@@ -67,8 +67,8 @@ def add_fields(layer, fields, type, scale):
 
 def calculate_density_and_rate(layer, fields, number_of_years_in_study):
     """
-    This function calculates crash density, crash rate, and overall USRAP road network length.
-    This function also determines the summary table values
+    calculates crash density, crash rate, and overall USRAP road network length.
+    also determines the summary table values
     """
     arcpy.AddMessage("Calculating {0} and {1} for analysis segments".format(CRASH_DENSITY_FIELDNAME, CRASH_RATE_FIELDNAME))
 
@@ -93,17 +93,17 @@ def calculate_density_and_rate(layer, fields, number_of_years_in_study):
     with arcpy.da.UpdateCursor(layer, fields, sql_clause=(None, 'ORDER BY ' + USRAP_ROADWAY_TYPE_FIELDNAME + " ASC")) as update_cursor:
         for row in update_cursor: 
             # Crash Density = (# of Crashes)/(Length of Segment)
-            num_crashes = round(decimal.Decimal(row[crash_count_index]), 5)
-            length = round(decimal.Decimal(row[-1]),5)
+            num_crashes = float(row[crash_count_index])
+            length = float(row[-1])
             crash_density = num_crashes / length
-            row[fields.index(CRASH_DENSITY_FIELDNAME)] = crash_density
+            row[fields.index(CRASH_DENSITY_FIELDNAME)] = round(decimal.Decimal(crash_density), 5)
 
             #Crash Rate = ((# of Crashes)*100,000,000)/
             # ((Length of Segment)*(AADT)*(# of days in year)*(# of years in study)))
-            aadt = round(decimal.Decimal(row[avg_aadt_index]),5)
+            aadt = float(row[avg_aadt_index])
             num_days_in_year = 365
             crash_rate = (num_crashes*100000000)/(length * aadt * num_days_in_year * number_of_years_in_study)
-            row[fields.index(CRASH_RATE_FIELDNAME)] = crash_rate
+            row[fields.index(CRASH_RATE_FIELDNAME)] = round(decimal.Decimal(crash_rate), 5)
 
             update_cursor.updateRow(row)
 
@@ -138,23 +138,23 @@ def calculate_density_and_rate(layer, fields, number_of_years_in_study):
 
             #increment the counter and summerization values
             num_segments += 1
-            length = round(decimal.Decimal(row[-1]),5)
+            length = float(row[-1])
             sum_length += length
-            sum_avg_aadt += round(decimal.Decimal(row[avg_aadt_index]),5)
-            sum_crashes += round(decimal.Decimal(row[crash_count_index]),5)
-            sum_density += round(decimal.Decimal(row[crash_density_index]),5)
-            sum_crash_rate += round(decimal.Decimal(row[crash_rate_index]),5)
+            sum_avg_aadt += float(row[avg_aadt_index])
+            sum_crashes += float(row[crash_count_index])
+            sum_density += float(row[crash_density_index])
+            sum_crash_rate += float(row[crash_rate_index])
             sum_vh_miles += length * aadt * num_days_in_year * number_of_years_in_study
             overall_length += length
     return summary_table_values, crash_rate_for_road_type, overall_length
 
 def calculate_ratio_and_potential_crash_savings(layer, fields, crash_rate_for_road_type, number_of_years_in_study):
     """
-    This function calculates crash rate ratio and potential crash savings
+    calculates crash rate ratio and potential crash savings
     """
     arcpy.AddMessage("Calculating {0} and {1} for analysis segments".format(CRASH_RATE_RATIO_FIELDNAME, CRASH_POTENTIAL_SAVINGS_FIELDNAME))
 
-    #get all of the field indexs up front
+    #field indexs
     crash_density_index = fields.index(CRASH_DENSITY_FIELDNAME)
     crash_rate_index = fields.index(CRASH_RATE_FIELDNAME)
     crash_rate_ratio_index = fields.index(CRASH_RATE_RATIO_FIELDNAME)
@@ -164,28 +164,28 @@ def calculate_ratio_and_potential_crash_savings(layer, fields, crash_rate_for_ro
 
     with arcpy.da.UpdateCursor(layer, fields) as update_cursor:
         for row in update_cursor:        
-            crash_rate = round(decimal.Decimal(row[crash_rate_index]),5)
+            crash_rate = float(row[crash_rate_index])
 
             current_roadway_type = row[roadway_type_index]
 
             if crash_rate_for_road_type.keys().count(current_roadway_type) > 0:
-                avg_crash_rate = round(decimal.Decimal(crash_rate_for_road_type[current_roadway_type]),5)
+                avg_crash_rate = crash_rate_for_road_type[current_roadway_type]
 
                 crash_rate_ratio = crash_rate / avg_crash_rate
                 row[crash_rate_ratio_index] = crash_rate_ratio
 
                 cr_diff = crash_rate - avg_crash_rate
-                aadt = round(decimal.Decimal(row[avg_aadt_index]),5)
+                aadt = float(row[avg_aadt_index])
                 num_days_in_year = 365
 
                 potential_crash_savings = (cr_diff * aadt * num_days_in_year * number_of_years_in_study)/100000000
 
-                row[potential_crash_savings_index] = potential_crash_savings
+                row[potential_crash_savings_index] = round(decimal.Decimal(potential_crash_savings), 5)
                 update_cursor.updateRow(row)
 
 def calculate_risk_values(layer):
     """
-    This function adds required fields and then calls the two calculate functions
+    adds required fields and then calls the two calculate functions
     """
     #get number of years in study
     number_of_years_in_study = len(arcpy.ListFields(layer, USRAP_AADT_YYYY))
@@ -199,21 +199,20 @@ def calculate_risk_values(layer):
               CRASH_RATE_RATIO_FIELDNAME, USRAP_ROADWAY_TYPE_FIELDNAME,
               CRASH_POTENTIAL_SAVINGS_FIELDNAME, "SHAPE@LENGTH" ]
 
-    #summary_table_values: data for final summary table see pg. ? whitepaper
+    #summary_table_values: data for final summary table see pg. 22 whitepaper
     #summary_table_values: {key:value}
     #crash_rate_for_road_type: summarized values by roadway type
     #crash_rate_for_road_type: {key:[values]}
+    #overall_length: sum of the length of all usRAP segments
     summary_table_values, crash_rate_for_road_type, overall_length = calculate_density_and_rate(layer, fields, number_of_years_in_study)
 
-    #risk_threshold_values = calculate_ratio_and_potential_crash_savings(layer, fields, crash_rate_for_road_type, number_of_years_in_study)
     calculate_ratio_and_potential_crash_savings(layer, fields, crash_rate_for_road_type, number_of_years_in_study)
 
-    #return summary_table_values, segment_by_segment_summary_values, risk_threshold_values, overall_length, fields
     return summary_table_values, overall_length, fields
 
 def create_summary_tables(layer, summary_table_values, route_name_field):
     """
-    This function generates the summary tables as described on pg 16 of whitepaper
+    generates the summary tables. pg 16
     """
     arcpy.AddMessage("Generating and populating final summary tables")
 
@@ -225,13 +224,18 @@ def create_summary_tables(layer, summary_table_values, route_name_field):
     # This is just an export of [Route_Name, County, Mileposts, Roadway_Type, aadt, crash_rate, risk_level fields]
     fields = [route_name_field, USRAP_COUNTY_FIELDNAME, USRAP_ROADWAY_TYPE_FIELDNAME, USRAP_AVG_AADT_FIELDNAME, CRASH_RATE_FIELDNAME]
     fields.extend(RISK_FIELDS)
-    arcpy.CopyRows_management(layer, SEG_SUMMARY_TABLE_NAME)
-    delete_fields = [f.name for f in arcpy.ListFields(SEG_SUMMARY_TABLE_NAME) if f.name not in fields and f.required != True]
-    arcpy.DeleteField_management(SEG_SUMMARY_TABLE_NAME, ";".join(delete_fields))
+
+    create_table(SEG_SUMMARY_TABLE_NAME, fields)
+    if int(arcpy.GetCount_management(SEG_SUMMARY_TABLE_NAME)[0]) > 0:
+        arcpy.DeleteRows_management(SEG_SUMMARY_TABLE_NAME)
+    temp_table = "in_memory//" + SEG_SUMMARY_TABLE_NAME
+    arcpy.CopyRows_management(layer, temp_table)
+    arcpy.Append_management(temp_table, SEG_SUMMARY_TABLE_NAME, "NO_TEST")
+    arcpy.Delete_management(temp_table)
 
 def populate_summary_table(table_name, fields, summary_table_values):
     """
-    Helper function to update the summary table with the provided values
+    update the summary table with the provided values
     """
     #create summary table
     table = create_table(table_name, fields)
@@ -242,7 +246,7 @@ def populate_summary_table(table_name, fields, summary_table_values):
 
 def create_table(name, fields):
     """
-    Helper function to create the tables
+    create the table and add fields
     """
     table = arcpy.CreateTable_management(arcpy.env.workspace, name)
     for field in fields:
@@ -251,14 +255,13 @@ def create_table(name, fields):
 
 def percentage(percent, whole):
     """
-    Helper function to get <what> percent of whole
+    get <what> for percent of whole
     """
     return (percent * whole) / 100.0
 
 def assign_risk_levels(overall_length, fields, layer):  
     """
-    This function assigns risk level based on the determined thresholds 
-     as described on pg 14 of the whitepaper.  
+    assigns risk level based on the determined thresholds. pg 14  
     """
     #add fields for eash category
     add_fields(layer, RISK_FIELDS, "TEXT", None)
@@ -272,6 +275,8 @@ def assign_risk_levels(overall_length, fields, layer):
         percent = RISK_LEVEL_CATEGORIES[p][1]
         sum_percentage_length += percentage(percent, overall_length)
         percentage_lengths[p] = sum_percentage_length
+
+    crash_count_field_index = fields.index(CRASH_COUNT_FIELDNAME)
 
     risk_level = -1
     for risk_value_field_name in RISK_FIELD_VALUE_FIELD_FIELDS.keys():
@@ -299,25 +304,62 @@ def assign_risk_levels(overall_length, fields, layer):
                         # need to handle tie breakers
                         # if the current value and prevoius value match we need to assign 
                         #the same risk category
-                        # however we would also want to be aware if the next categories thresholds 
+                        # however we would also want to be aware of the next categories thresholds 
                         #so we could properly handle a situation where a category is completely skipped
-                        # TODO...think about this section more...may want to update the summary table
-                        # to indicate that this situation occured
                         temp_next_threshold_value = risk_category_index + 1
                         temp_next_percentage_length = percentage_lengths[temp_next_threshold_value]
                         if sum_length > temp_next_percentage_length:
-                            arcpy.AddMessage(RISK_LEVEL_CATEGORIES[risk_category_index + 1][0] + " level has no assigned values")
+                            arcpy.AddWarning(RISK_LEVEL_CATEGORIES[risk_category_index + 1][0] + " level has no assigned values")
                     else:
                         #don't increment for the final row otherwise increment to the next category
                         if risk_category_index + 1 < len(RISK_LEVEL_CATEGORIES):
                             risk_category_index += 1
-                row[risk_level_field_index] = RISK_LEVEL_CATEGORIES[risk_category_index][0]
+
+                if risk_category_index > 2:
+                    #analysis segments with 2 or fewer crashes should never be assigned to the top two 
+                    # risk categories. pg 15
+                    if row[crash_count_field_index] < 3:
+                        row[risk_level_field_index] = RISK_LEVEL_CATEGORIES[2][0]
+                    else:
+                        row[risk_level_field_index] = RISK_LEVEL_CATEGORIES[risk_category_index][0]
+                else:
+                    row[risk_level_field_index] = RISK_LEVEL_CATEGORIES[risk_category_index][0]
                 update_cursor.updateRow(row)
                 previous_value = current_value
 
+def save_mxd(path, output_folder):
+    """
+    updates the datasoure of the layers in the mxd and saves a copy of the mxd
+    """
+    map_doc = arcpy.mapping.MapDocument(path)
+    map_doc.findAndReplaceWorkspacePaths("", arcpy.env.workspace) 
+    mxd_filename = os.path.basename(path)
+    output_path = "{0}//{1}_{2}.mxd".format(output_folder, mxd_filename[0:-4], time.strftime("%Y_%m_%d-%H_%M_%S"))
+    arcpy.AddMessage("Saving: " + output_path)
+    map_doc.saveACopy(output_path)
+
+def update_and_save_map(output_folder):
+    """
+    checks the file path to determine if the template mxd exists
+    """
+
+    #this is the template mxd that is distributed with the solution
+    template_mxd = "RiskMaps.mxd"
+
+    #if output folder is provided will save there otherwise the the parent folder for the gdb
+    if output_folder == "":
+        output_folder = os.path.dirname(arcpy.env.workspace)
+
+    template_mxd = "{0}\\{1}".format(os.path.dirname(os.path.abspath(__file__)), template_mxd)
+    if os.path.isfile(template_mxd):
+        save_mxd(template_mxd, output_folder)
+    else:
+        arcpy.AddWarning("Unable to locate the template mxd: " + template_mxd)
+        arcpy.AddWarning("No Risk Maps will be produced.")
+
 def get_workspace(feature_class):
     """
-    Helper function that returns the workspace for the feature class 
+    returns the workspace for the feature class 
     """
     if arcpy.Describe(os.path.dirname(feature_class)).dataType != 'Workspace':
         return get_workspace(os.path.dirname(feature_class))
@@ -327,16 +369,15 @@ def main():
     #inputs from the user
     segments = arcpy.GetParameterAsText(0)
     route_name_field = arcpy.GetParameterAsText(1)
+    output_folder = arcpy.GetParameterAsText(2)
 
-    #get the defined workspace
+    #set the env
     arcpy.env.workspace = get_workspace(segments)
     arcpy.env.overwriteOutput = True
 
-    segments_layer = "RiskMapSegments"
-
     #only process on usRAP segments
     where = "{0} = 'YES'".format(USRAP_SEGMENT_FIELDNAME)
-    layer = arcpy.MakeFeatureLayer_management(segments, segments_layer, where)
+    layer = arcpy.MakeFeatureLayer_management(segments, "RiskMapSegments", where)
 
     #handle the inital 4 calculations 
     summary_table_values, overall_length, fields = calculate_risk_values(layer)
@@ -345,8 +386,11 @@ def main():
     # and the overall length of the road network is known
     assign_risk_levels(overall_length, fields, layer)
 
-    #Create and populate the summary tables
+    #create and populate the summary tables
     create_summary_tables(layer, summary_table_values, route_name_field)
+
+    #update the datasource for the layers in the map and save a new mxd
+    update_and_save_map(output_folder)
 
 if __name__ == '__main__':
     try:
