@@ -58,12 +58,16 @@ def add_fields(layer, fields, type, scale):
     current_field_names = [f.name for f in current_fields]
     for field in fields:
         if field not in current_field_names:
-            if scale:
-                arcpy.AddField_management(layer, field, type, field_scale=scale)
+            if arcpy.TestSchemaLock(layer):
+                if scale:
+                    arcpy.AddField_management(layer, field, type, field_scale=scale)
+                else:
+                    arcpy.AddField_management(layer, field, type)
             else:
-                arcpy.AddField_management(layer, field, type)
+                arcpy.AddError("Cannot aquire a schema lock on: " + str(layer))
+                
         #TODO elif verify if the field type matches...if it does not add
-        # a new field with the correct type and a new name and broadcast this to the user
+        # a new field with the correct type and a new name and tell the user
 
 def calculate_density_and_rate(layer, fields, number_of_years_in_study):
     """
@@ -171,7 +175,10 @@ def calculate_ratio_and_potential_crash_savings(layer, fields, crash_rate_for_ro
             if crash_rate_for_road_type.keys().count(current_roadway_type) > 0:
                 avg_crash_rate = crash_rate_for_road_type[current_roadway_type]
 
-                crash_rate_ratio = crash_rate / avg_crash_rate
+                if avg_crash_rate not in [None, "", ' ', 0]:
+                    crash_rate_ratio = crash_rate / avg_crash_rate
+                else:
+                    crash_rate_ratio = 0
                 row[crash_rate_ratio_index] = crash_rate_ratio
 
                 cr_diff = crash_rate - avg_crash_rate
@@ -191,7 +198,7 @@ def calculate_risk_values(layer):
     number_of_years_in_study = len(arcpy.ListFields(layer, USRAP_AADT_YYYY))
 
     #add fields for crash density, rate, ratio, and potential crash savings values 
-    add_fields(layer, CRASH_CALC_FIELDS, "DOUBLE", 6)
+    #add_fields(layer, CRASH_CALC_FIELDS, "DOUBLE", 6)
 
     #key fields for calculations and results
     fields = [CRASH_DENSITY_FIELDNAME, CRASH_RATE_FIELDNAME, 
@@ -264,7 +271,7 @@ def assign_risk_levels(overall_length, fields, layer):
     assigns risk level based on the determined thresholds. pg 14  
     """
     #add fields for eash category
-    add_fields(layer, RISK_FIELDS, "TEXT", None)
+    #add_fields(layer, RISK_FIELDS, "TEXT", None)
     for f in RISK_FIELDS:
         fields.insert(0, f)
 
@@ -334,23 +341,29 @@ def save_mxd(path, output_folder):
     map_doc = arcpy.mapping.MapDocument(path)
     map_doc.findAndReplaceWorkspacePaths("", arcpy.env.workspace) 
     mxd_filename = os.path.basename(path)
+    if mxd_filename.index("_Template") > 0:
+        mxd_filename.replace("_Template", "")
     output_path = "{0}//{1}_{2}.mxd".format(output_folder, mxd_filename[0:-4], time.strftime("%Y_%m_%d-%H_%M_%S"))
     arcpy.AddMessage("Saving: " + output_path)
     map_doc.saveACopy(output_path)
+    os.system(output_path)
 
-def update_and_save_map(output_folder):
+def update_and_save_map(output_folder, risk_map_template):
     """
     checks the file path to determine if the template mxd exists
     """
 
     #this is the template mxd that is distributed with the solution
-    template_mxd = "RiskMaps.mxd"
+    template_mxd = "RiskMaps_Template.mxd"
 
     #if output folder is provided will save there otherwise the the parent folder for the gdb
     if output_folder == "":
         output_folder = os.path.dirname(arcpy.env.workspace)
 
-    template_mxd = "{0}\\{1}".format(os.path.dirname(os.path.abspath(__file__)), template_mxd)
+    if risk_map_template not in ["", " ", None]:
+        template_mxd = risk_map_template
+    else:
+        template_mxd = "{0}\\{1}".format(os.path.dirname(os.path.abspath(__file__)), template_mxd)
     if os.path.isfile(template_mxd):
         save_mxd(template_mxd, output_folder)
     else:
@@ -365,13 +378,25 @@ def get_workspace(feature_class):
         return get_workspace(os.path.dirname(feature_class))
     return os.path.dirname(feature_class)
 
+def check_path(fc):
+    desc = arcpy.Describe(fc)
+    if hasattr(desc, 'featureClass'):
+        fc = desc.featureClass.catalogPath
+    return fc
+
 def main():
     #inputs from the user
     segments = arcpy.GetParameterAsText(0)
     route_name_field = arcpy.GetParameterAsText(1)
     output_folder = arcpy.GetParameterAsText(2)
+    risk_map_template = arcpy.GetParameterAsText(3)
 
-    #set the env
+    segments = check_path(segments)
+
+    add_fields(segments, CRASH_CALC_FIELDS, "DOUBLE", 6)
+    add_fields(segments, RISK_FIELDS, "TEXT", None)
+
+    ##set the env
     arcpy.env.workspace = get_workspace(segments)
     arcpy.env.overwriteOutput = True
 
@@ -390,7 +415,7 @@ def main():
     create_summary_tables(layer, summary_table_values, route_name_field)
 
     #update the datasource for the layers in the map and save a new mxd
-    update_and_save_map(output_folder)
+    update_and_save_map(output_folder, risk_map_template)
 
 if __name__ == '__main__':
     try:

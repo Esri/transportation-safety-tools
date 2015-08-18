@@ -78,10 +78,7 @@ def create_gdb(output_folder):
             output_gdb = arcpy.CreateFileGDB_management(output_folder,
                                                         OUTPUT_GDB_NAME[:-4])[0]
 
-        global IN_MEMORY
-        IN_MEMORY = output_gdb
-
-        arcpy.env.workspace = IN_MEMORY
+        arcpy.env.workspace = output_gdb
         arcpy.AddMessage("Output geodatabase created.")
 
         return output_gdb
@@ -383,6 +380,9 @@ def assign_values(input_segment_fc, input_crash_fc, crash_year_field, max_dist,
     crash_output_fc = assign_segid_to_crashes(max_dist, usrap_segment_layer,
                                               input_crash_fc, out_gdb)
 
+    arcpy.Delete_management(usrap_segment_layer)
+    del usrap_segment_layer
+
     if not crash_output_fc:
         return []
     arcpy.SetProgressorPosition()
@@ -459,6 +459,13 @@ def check_criteria(sorted_features_layer, conditions, criterias, check_fields, s
             arcpy.SelectLayerByAttribute_management(sorted_features_layer, "NEW_SELECTION", "{0} <> 'YES'".format(USRAP_SEGMENT_FIELD_NAME))
 
             arcpy.Append_management(sorted_features_layer, temp_seg)
+            
+            #desc_fc = arcpy.Describe(sorted_features_layer)
+            #if hasattr(desc_fc, 'featureClass'):
+            #    arcpy.AddMessage("Deleting: " + str(desc_fc.featureClass.catalogPath))
+            #    arcpy.Delete_management(desc_fc.featureClass.catalogPath)
+            #del desc_fc
+            
             arcpy.Delete_management(sorted_features_layer)
             sorted_features_layer = arcpy.MakeFeatureLayer_management(temp_seg, "sorted_features_layer")
             #check both conditions again
@@ -500,6 +507,11 @@ def check_criteria(sorted_features_layer, conditions, criterias, check_fields, s
                 #TODO may want to delete the feature class behind this also here 
                 arcpy.SelectLayerByAttribute_management(sorted_features_layer, "NEW_SELECTION", "{0} <> 'YES'".format(USRAP_SEGMENT_FIELD_NAME))
                 arcpy.Append_management(sorted_features_layer, temp_seg2)
+                #desc_fc = arcpy.Describe(sorted_features_layer)
+                #if hasattr(desc_fc, 'featureClass'):
+                #    arcpy.AddMessage("Deleting: " + str(desc_fc.featureClass.catalogPath))
+                #    arcpy.Delete_management(desc_fc.featureClass.catalogPath)
+                #del desc_fc
                 arcpy.Delete_management(sorted_features_layer)
                 sorted_features_layer = arcpy.MakeFeatureLayer_management(temp_seg2, "sorted_features_layer")
 
@@ -660,13 +672,9 @@ def union_segments(sorted_features_layer, check_fields, aadt_check, step_count,
                     arcpy.SelectLayerByAttribute_management(sorted_features_layer, "NEW_SELECTION",where)
 
                     #for each usRAP segment query for additional segments that touch
-                    arcpy.SelectLayerByLocation_management(sorted_features_layer, "BOUNDARY_TOUCHES", row[-1], selection_type="SUBSET_SELECTION")
+                    arcpy.SelectLayerByLocation_management(sorted_features_layer, "INTERSECT", row[-1], selection_type="SUBSET_SELECTION")
                     with arcpy.da.SearchCursor(sorted_features_layer, check_fields) as search_cursor:
                         for search_row in search_cursor:
-                            touches = row[-1].touches(search_row[-1])
-                            if touches == False:
-                                continue
-
                             #get values from source feature
                             county_1 = row[county_field_index]
                             road_name_1 = row[road_name_field_index]
@@ -1028,6 +1036,7 @@ def insert_crash_error(errors):
                                    crash_insert_fields) as insert_cursor:
             for error in errors:
                 insert_cursor.insertRow(error)
+        del crash_insert_fields
     except Exception as ex:
         arcpy.AddError("Error occurred while inserting crash error.")
         arcpy.AddError(ex.message)
@@ -1041,6 +1050,7 @@ def insert_summary_errors(summary_error_list):
                                summary_insert_fields) as summary_cursor:
         for error in summary_error_list:
             summary_cursor.insertRow(error)
+    del summary_insert_fields
 
 def check_total_crashes(unassigned_crashes):
     """
@@ -1061,6 +1071,7 @@ def check_total_crashes(unassigned_crashes):
                                    as segment_search_cursor:
             for sc_row in segment_search_cursor:
                 assigned_crashes += sc_row[0]
+        #del segment_search_cursor
 
         arcpy.AddMessage(("Total number of assigned crashes : {0}")
                          .format(assigned_crashes))
@@ -1098,6 +1109,13 @@ def add_formatted_message(msg, fc):
     arcpy.SetProgressorLabel(msg)
     arcpy.AddMessage(msg)
 
+def check_path(fc):
+    desc = arcpy.Describe(fc)
+    if hasattr(desc, 'featureClass'):
+        fc = desc.featureClass.catalogPath
+    del desc
+    return fc
+
 def main():
     """
     Main Function
@@ -1116,6 +1134,10 @@ def main():
     per_of_segments = arcpy.GetParameter(8)
 
     output_folder = arcpy.GetParameterAsText(9)
+
+    #get full path if FeatureLayer
+    input_segment_fc = check_path(input_segment_fc)
+    input_crash_fc = check_path(input_crash_fc)
 
     global SEGMENT_OUTPUT_PATH
 
@@ -1240,6 +1262,14 @@ def main():
 
     arcpy.Delete_management("in_memory")
 
+    del input_segment_fc, segment_route_name_field, segment_route_type_field
+    del SEGMENT_OUTPUT_PATH, sorted_segments, returned_values
+    del input_crash_fc, crash_route_field, crash_year_field, max_dist
+    del min_avg_crashes, per_of_segments, output_folder
+    del crash_years, aadt_years, usrap_count, out_gdb, table_created, check_fields, crash_fields
+    del unassigned_crashes, segment_error_added
+
+    arcpy.env.workspace = None
     arcpy.ResetProgressor()
 
 if __name__ == '__main__':

@@ -428,6 +428,7 @@ def identify_usrap_segment(feature_class, roadway_types, output_folder, field_ro
     fields.append(USRAP_SPEED_LIMIT)
     fields.append(USRAP_CLASS_ERROR)
     fields.append(USRAP_COUNTY)
+    fields.append(USRAP_MEDIAN)
     fields.append(field_route_name)
     fields.append("OID@")
     # create new field to identify USRAP Segments
@@ -607,21 +608,26 @@ def merge_segments(update_row, update_cursor, fields, feature_class, condition):
     if update_row[0] not in DELETE_OIDS:
         try:
             # find the adjacent segments
-            adjacent = arcpy.SelectLayerByLocation_management(
-                feature_class,
-                'BOUNDARY_TOUCHES',
-                update_row[-1],
-                selection_type='NEW_SELECTION')
-            OID_merged = []
-            # take a adjacent segment to merge on merge condition fulfill
             where = "{0} = 'YES'".format(USRAP_SEGMENT)
-            with arcpy.da.SearchCursor(adjacent, fields, where) as cursor:
+
+            #TODO test with a better starter selection
+            #UsRAP = YES and COUNTY = county and so on until AADT
+
+            arcpy.SelectLayerByAttribute_management(feature_class, "NEW_SELECTION",where)
+
+            #for each usRAP segment query for additional segments that intersect
+            arcpy.SelectLayerByLocation_management(feature_class, "INTERSECT", update_row[-1], selection_type="SUBSET_SELECTION")
+
+            OID_merged = []
+            # merge segments that meet the criteria and intersect the source feature
+            with arcpy.da.SearchCursor(feature_class, fields) as cursor:
                 for current in cursor:
+                    #no need to check if this is ths same OID
+                    if update_row[0] == current[0]:
+                        continue
                     if '' in current or None in current:
                         continue
-                    touches = update_row[-1].touches(current[-1])
-                    if touches == False:
-                        continue
+
                     # truth_table contains boolean value for each condition
                     truth_table = []
                     avg_aadt = []
@@ -801,25 +807,27 @@ def check_key_fields(key_fields, aadt_layers, aadt_field):
     return problem_fields
 
 def combine_values(baseline_selected, value_set, cluster_tolerance, problem_fields, county_geom, full_out_path):
+    add_message("   Combining attributes")
+
     shape_field_name = arcpy.Describe(baseline_selected).shapeFieldName
     check_list = [shape_field_name]
     for values in value_set:
         if isinstance(baseline_selected, str) or type(baseline_selected, unicode):
-            sp = baseline_selected + "sp"
+            sp = baseline_selected
         else:
-            sp = baseline_selected[0] + "sp"
-        arcpy.MultipartToSinglepart_management(baseline_selected, sp)
+            sp = baseline_selected[0]
 
         if VERSION_USED != "10.2":
             arcpy.RepairGeometry_management(sp)
-            #TODO...why did I comment this out
-            #arcpy.AddSpatialIndex_management(sp)
 
         clipped = IN_MEMORY + os.sep + os.path.basename(values[0]) + "Clip"
         arcpy.Clip_analysis(values[0], county_geom, clipped)
 
         clipped_sp = clipped + "sp"
-        arcpy.MultipartToSinglepart_management(clipped, clipped_sp)
+        #arcpy.MultipartToSinglepart_management(clipped, clipped_sp)
+        arcpy.Dissolve_management(clipped, clipped_sp, values[1], multi_part="SINGLE_PART", unsplit_lines="DISSOLVE_LINES")
+        arcpy.Delete_management(clipped)
+        del clipped
 
         if VERSION_USED != "10.2":
             arcpy.RepairGeometry_management(clipped_sp)
@@ -833,10 +841,12 @@ def combine_values(baseline_selected, value_set, cluster_tolerance, problem_fiel
                                     cluster_tolerance,
                                     problem_fields, full_out_path, values[0])
 
-        arcpy.Delete_management(clipped)
+        
         if baseline_selected != sp:
             arcpy.Delete_management(sp)
 
+        arcpy.Delete_management(clipped_sp)
+        del clipped_sp
         check_list.append(values[2])
 
         if arcpy.Exists(baseline_selected):
@@ -844,21 +854,28 @@ def combine_values(baseline_selected, value_set, cluster_tolerance, problem_fiel
 
     return baseline_selected
 
-def repair_temp_data(out_temp_gdb, in_data):
+def repair_temp_data(out_temp_gdb, in_data, field):
     """ This function works around 2 issues at 10.2...not necessary at later releases """
     """ 1) RepairGeometry fails on datasets in in_memory workspaces """
     """ 2) Clip fails on z enabled line features when none of the line features intersect the clip geometry """ 
     out_temp_fc = os.path.join(out_temp_gdb, "temp_" + os.path.basename(in_data))
     arcpy.env.outputMFlag = 'Disabled'
     arcpy.env.outputZFlag = 'Disabled'
-    arcpy.CopyFeatures_management(in_data, out_temp_fc)
+    #arcpy.CopyFeatures_management(in_data, out_temp_fc)
     try:
+        arcpy.Dissolve_management(in_data, out_temp_fc, field, multi_part="SINGLE_PART", unsplit_lines="DISSOLVE_LINES")
         arcpy.RepairGeometry_management(out_temp_fc)
         arcpy.AddSpatialIndex_management(out_temp_fc)
     except:
         arcpy.AddWarning("Repair Geometry failed on " + str(out_temp_fc))
         pass
     return out_temp_fc
+
+def check_path(fc):
+    desc = arcpy.Describe(fc)
+    if hasattr(desc, 'featureClass'):
+        fc = desc.featureClass.catalogPath
+    return fc
 
 def main():
     """ main function """
@@ -884,6 +901,15 @@ def main():
     output_folder = arcpy.GetParameterAsText(18)
     cluster_tolerance = arcpy.GetParameterAsText(19)
 
+    #If they pass in FeatureLayers...get the feature class path
+    ftrclass_route = check_path(ftrclass_route)
+    ftrclass_county = check_path(ftrclass_county)
+    ftrclass_access_control = check_path(ftrclass_access_control)
+    ftrclass_median = check_path(ftrclass_median)
+    ftrclass_travel_lanes = check_path(ftrclass_travel_lanes)
+    ftrclass_area_type = check_path(ftrclass_area_type)
+    ftrclass_speed_limit = check_path(ftrclass_speed_limit)
+
     #Create temp gdb to store all value classes
     # this is to work around issue with RepairGeometry not working
     # against in_memory datasets at 10.2
@@ -893,19 +919,21 @@ def main():
             arcpy.CreateFileGDB_management(output_folder, TEMP_GDB)
         out_temp_gdb = os.path.join(output_folder, TEMP_GDB)
 
-        ftrclass_route = repair_temp_data(out_temp_gdb, ftrclass_route)
-        ftrclass_county = repair_temp_data(out_temp_gdb, ftrclass_county)
-        ftrclass_access_control = repair_temp_data(out_temp_gdb, ftrclass_access_control)
-        ftrclass_median = repair_temp_data(out_temp_gdb, ftrclass_median)
-        ftrclass_travel_lanes = repair_temp_data(out_temp_gdb, ftrclass_travel_lanes)
-        ftrclass_area_type = repair_temp_data(out_temp_gdb, ftrclass_area_type)
-        ftrclass_speed_limit = repair_temp_data(out_temp_gdb, ftrclass_speed_limit)
+        ftrclass_route = repair_temp_data(out_temp_gdb, ftrclass_route, field_route_name + ";" + field_route_type)
+        ftrclass_county = repair_temp_data(out_temp_gdb, ftrclass_county, field_county_name)
+        ftrclass_access_control = repair_temp_data(out_temp_gdb, ftrclass_access_control, field_access_control_info)
+        ftrclass_median = repair_temp_data(out_temp_gdb, ftrclass_median, field_median_info)
+        ftrclass_travel_lanes = repair_temp_data(out_temp_gdb, ftrclass_travel_lanes, field_travel_lanes_info)
+        ftrclass_area_type = repair_temp_data(out_temp_gdb, ftrclass_area_type, field_area_type_info)
+        ftrclass_speed_limit = repair_temp_data(out_temp_gdb, ftrclass_speed_limit, field_speed_limit_info)
 
         t = []
         if len(ftrclass_aadt_multi_layers) > 0:
             for ftr in ftrclass_aadt_multi_layers:
-                t.append(repair_temp_data(out_temp_gdb, ftr.value))
-                #t.append(repair_temp_data(out_temp_gdb, ftr))
+                if hasattr(ftr, 'value'):
+                    t.append(repair_temp_data(out_temp_gdb, ftr.value, field_aadt_multi_layers_value))
+                else:
+                    t.append(repair_temp_data(out_temp_gdb, ftr, field_aadt_multi_layers_value))
 
         ftrclass_aadt_multi_layers = t
         del t
@@ -913,14 +941,22 @@ def main():
         t = []
         if len(ftrclass_aadt_multi_layers) > 0:
             for ftr in ftrclass_aadt_multi_layers:
-                t.append(ftr.value)
-                #t.append(ftr)
+                if hasattr(ftr, 'value'):
+                    t.append(ftr.value)
+                else:
+                    t.append(ftr)
 
         ftrclass_aadt_multi_layers = t
         del t
 
 
     full_out_path = output_folder + os.sep + OUTPUT_GDB_NAME + os.sep + OUTPUT_SEGMENT_NAME
+    if arcpy.Exists(full_out_path):
+        del_lyr = "DELETE_LAYER"
+        arcpy.MakeFeatureLayer_management(full_out_path, del_lyr, "1=1")
+        arcpy.DeleteFeatures_management(del_lyr)
+        arcpy.Delete_management(del_lyr)
+
     key_fields = {ftrclass_route : [field_route_name, field_route_type],
                   ftrclass_county : [field_county_name],
                   ftrclass_access_control : [field_access_control_info],
@@ -968,6 +1004,8 @@ def main():
     condition = [(USRAP_COUNTY, EQUAL_TO),
                     (field_route_name, EQUAL_TO),
                     (field_route_type, EQUAL_TO),
+                    (USRAP_MEDIAN, EQUAL_TO),
+                    (USRAP_LANES, EQUAL_TO),
                     (USRAP_ACCESS_CONTROL, EQUAL_TO),
                     (USRAP_SPEED_LIMIT,
                     LESS_THAN_EQUAL_TO_OR_MORE_THAN_EQUAL_TO, 50, 55),
@@ -1019,9 +1057,11 @@ def main():
 
                 county_name = str(arcpy.ValidateTableName(county_name, IN_MEMORY))
 
-                routes = IN_MEMORY + "\\clip" + county_name + "routes"
-     
-                arcpy.Clip_analysis(baseline_selected, county_geom, routes)
+                clipped_routes = IN_MEMORY + "\\clip" + county_name + "routes"    
+                arcpy.Clip_analysis(baseline_selected, county_geom, clipped_routes)
+                routes = clipped_routes + "D"
+                arcpy.Dissolve_management(clipped_routes, routes, field_route_name + ";" + field_route_type, multi_part="SINGLE_PART", unsplit_lines="DISSOLVE_LINES")
+                arcpy.Delete_management(clipped_routes)
 
                 for problem_field_key in problem_fields.keys():
                     arcpy.DeleteField_management(problem_field_key, problem_fields[problem_field_key])
@@ -1037,34 +1077,33 @@ def main():
                                  [ftrclass_area_type, field_area_type_info, USRAP_AREA_TYPE],
                                  [ftrclass_speed_limit, field_speed_limit_info, USRAP_SPEED_LIMIT]]
                     routes = combine_values(routes, value_set, cluster_tolerance, problem_fields, county_geom, full_out_path)
-
                     if len(ftrclass_aadt_multi_layers) > 0:
                         # combine attributes of identity result and AADT
                         shape_field_name = arcpy.Describe(routes).shapeFieldName
                         check_list = [shape_field_name]
                         new_fields = []
                         for ftr in ftrclass_aadt_multi_layers:
+                            desc = arcpy.Describe(ftr)
+                            if hasattr(desc,'featureClass'):
+                                ftr = desc.featureClass.catalogPath
                             new_field = USRAP_AADT_YYYY + '_' + os.path.basename(ftr)[-4:]
                             new_fields.append(new_field)
                             seg_name = None
                             out_gdb = None
 
-                            aadt_clipped = IN_MEMORY + "\\clip" + county_name + "aadt" + os.path.basename(ftr)[-4:]
-
-                            arcpy.Clip_analysis(ftr, county_geom, aadt_clipped)
+                            aadt_clip = IN_MEMORY + "\\clip" + county_name + "aadt" + os.path.basename(ftr)[-4:]
+                            arcpy.Clip_analysis(ftr, county_geom, aadt_clip)
+                            aadt_clipped = aadt_clip + "D"
+                            arcpy.Dissolve_management(aadt_clip, aadt_clipped, field_aadt_multi_layers_value, multi_part="SINGLE_PART", unsplit_lines="DISSOLVE_LINES")
+                            arcpy.Delete_management(aadt_clip)
                             #arcpy.RepairGeometry_management(aadt_clipped)
 
-                            routes = combine_attributes(routes,
-                                                                   aadt_clipped,\
-                                                            field_aadt_multi_layers_value,
-                                                                   new_field,
-                                                                   seg_name,
-                                                                   out_gdb, cluster_tolerance, problem_fields, full_out_path, ftr)
+                            routes = combine_attributes(routes, aadt_clipped, field_aadt_multi_layers_value, new_field,  seg_name,
+                                                        out_gdb, cluster_tolerance, problem_fields, full_out_path, ftr)
 
                             check_list.append(new_field)
 
-                            #TODO whats with the mix of routes and baseline...i forget
-                            if arcpy.Exists(baseline_selected):
+                            if arcpy.Exists(routes):
                                 arcpy.DeleteIdentical_management(routes, check_list)
                             else:
                                 arcpy.AddMessage(str(routes) + " DOES NOT EXIST")
@@ -1072,6 +1111,18 @@ def main():
                             arcpy.Delete_management(aadt_clipped)
 
                         # calculate the average of all supplied years of AADT
+                        check_list.append(USRAP_COUNTY)
+                        check_list.append(USRAP_MEDIAN)
+                        check_list.append(USRAP_ACCESS_CONTROL)
+                        check_list.append(USRAP_LANES)
+                        check_list.append(USRAP_AREA_TYPE)
+                        check_list.append(USRAP_SPEED_LIMIT)
+                        check_list.append(field_route_name)
+                        check_list.append(field_route_type)
+                        r = routes + "FD"
+                        arcpy.Dissolve_management(routes, r, check_list, multi_part="SINGLE_PART", unsplit_lines="DISSOLVE_LINES")
+                        arcpy.Delete_management(routes)
+                        routes = r
                         routes = calculate_average(routes, new_fields, USRAP_AVG_AADT)
 
                     # baseline segment will be identified as usrap segment
@@ -1102,6 +1153,7 @@ def main():
                     global DELETE_OIDS
 
                     where = "{0} = 'YES'".format(USRAP_SEGMENT)
+                    layer = arcpy.MakeFeatureLayer_management(routes, 'layer2', where)
                     with arcpy.da.UpdateCursor(layer, fields, where) as update_cursor:
                         for row in update_cursor:
                             if '' in row:
