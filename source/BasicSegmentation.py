@@ -614,18 +614,18 @@ def merge_segments(update_row, update_cursor, fields, feature_class, condition):
             # find the adjacent segments
             where = "{0} = 'YES'".format(USRAP_SEGMENT)
 
-            for tup in condition:
-                val = str(update_row[fields.index(tup[0])])
-                if tup[1] == 'EQUAL_TO':
-                    if tup[0] == 'USRAP_LANES':
-                        where += " AND " + tup[0] + " = " + val
-                    else:
-                        where += " AND " + tup[0] + " = '" + val + "'"
-                if tup[1] == 'LESS_THAN_EQUAL_TO_OR_MORE_THAN_EQUAL_TO':
-                    if val <= tup[2]:
-                        where += " AND " + tup[0] + " <= " + str(tup[2])
-                    else:
-                        where += " AND " + tup[0] + " >= " + str(tup[3])
+            #for tup in condition:
+            #    val = str(update_row[fields.index(tup[0])])
+            #    if tup[1] == 'EQUAL_TO':
+            #        if tup[0] == 'USRAP_LANES':
+            #            where += " AND " + tup[0] + " = " + val
+            #        else:
+            #            where += " AND " + tup[0] + " = '" + val + "'"
+            #    if tup[1] == 'LESS_THAN_EQUAL_TO_OR_MORE_THAN_EQUAL_TO':
+            #        if val <= tup[2]:
+            #            where += " AND " + tup[0] + " <= " + str(tup[2])
+            #        else:
+            #            where += " AND " + tup[0] + " >= " + str(tup[3])
                 #if tup[1] == 'LESS_THAN_EQUAL_TO':
                 #    #determine the bounds for the percentage based on the current value...
                 #    #take double the value or half of the value to allow room for value growth...this one may be sketchy but would most likely help eliminate the most
@@ -1307,7 +1307,7 @@ def main():
 
         arcpy.SetProgressorPosition()
     except Exception, ex:
-        print(e)
+        print(ex)
     finally:
         # ensure the in_memory workspace is cleared to free up memory
         arcpy.Delete_management(IN_MEMORY)
