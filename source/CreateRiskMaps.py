@@ -362,12 +362,12 @@ def update_and_save_map(output_folder, risk_map_template):
 
     if risk_map_template not in ["", " ", None]:
         template_mxd = risk_map_template
+        if os.path.isfile(template_mxd):
+            save_mxd(template_mxd, output_folder)
+        else:
+            arcpy.AddWarning("Unable to locate the template mxd: " + template_mxd)
+            arcpy.AddWarning("No Risk Maps will be produced.")
     else:
-        template_mxd = "{0}\\{1}".format(os.path.dirname(os.path.abspath(__file__)), template_mxd)
-    if os.path.isfile(template_mxd):
-        save_mxd(template_mxd, output_folder)
-    else:
-        arcpy.AddWarning("Unable to locate the template mxd: " + template_mxd)
         arcpy.AddWarning("No Risk Maps will be produced.")
 
 def get_workspace(feature_class):
