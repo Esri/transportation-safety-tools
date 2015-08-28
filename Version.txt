@@ -1,2 +1,2 @@
 ArcGIS Solutions
-August 2015
+Pulled from Git
