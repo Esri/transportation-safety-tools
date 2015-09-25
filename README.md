@@ -57,5 +57,5 @@ limitations under the License.
 A copy of the license is available in the repository's
 [LICENSE.txt](https://github.com/Esri/transportation-safety-tools/blob/master/License.txt) file.
 
-[](Esri Tags: Python State-Government Government)
+[](Esri Tags: Python State-Government Government Transportation DOT)
 [](Esri Language: Python)
