@@ -450,9 +450,7 @@ def check_criteria(sorted_features_layer, conditions, criterias, check_fields, s
             add_message("Merging by relaxing Speed Limit...")
             add_message("-" * 80)
             step_count = 1
-            #usrap_where = "{0} = 'YES'".format(USRAP_SEGMENT_FIELD_NAME)
-            #arcpy.RepairGeometry_management(sorted_features_layer)
-            flds = [f.name for f in arcpy.ListFields(sorted_features_layer)]
+            flds = [f.name for f in arcpy.ListFields(sorted_features_layer) if f.type != "OID"]
             arcpy.DeleteIdentical_management(sorted_features_layer, flds)
             del flds
 
