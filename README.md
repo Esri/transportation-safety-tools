@@ -1,5 +1,5 @@
 #transportation-safety-tools
-Transportation Safety segmentation and crash analysis tools  leverage the core ArcGIS Platform to help organizations analyze crash analysis locations from authoritative sources in a simple and sustainable way and leverage this information in many workflows. 
+Transportation Safety segmentation and crash analysis tools  leverage the core ArcGIS Platform to help organizations analyze crash analysis locations from authoritative sources in a simple and sustainable way and leverage this information in many workflows.
 
 This GitHub repository houses the crash analysis toolset used to analyze and segement the roads.
 
@@ -7,7 +7,7 @@ Toolset Include the following:
 
 1. Segementation Tool
 
-2. Crash Assignment Tool 
+2. Crash Assignment Tool
 
 3. Create Risk Map Tool
 
@@ -22,7 +22,7 @@ Toolset Include the following:
 * For editing and customizing the scripts - Notepad or a Python Editor
 * Basic understanding of GeoProcessing with ArcGIS
 * ArcGIS Desktop 10.2
- 
+
 ## Resources
 
 
@@ -57,5 +57,5 @@ limitations under the License.
 A copy of the license is available in the repository's
 [LICENSE.txt](https://github.com/Esri/transportation-safety-tools/blob/master/License.txt) file.
 
-[](Esri Tags: Python State-Government Government Transportation DOT)
+[](Esri Tags: ArcGISSolutions State-Government State Government Transportation DOT)
 [](Esri Language: Python)
