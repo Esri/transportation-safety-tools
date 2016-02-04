@@ -959,6 +959,16 @@ def main():
     ftrclass_area_type = check_path(ftrclass_area_type)
     ftrclass_speed_limit = check_path(ftrclass_speed_limit)
 
+    t = []
+    if len(ftrclass_aadt_multi_layers) > 0:
+        for ftr in ftrclass_aadt_multi_layers:
+            if hasattr(ftr, 'value'):
+                t.append(check_path(ftr.value))
+            else:
+                t.append(check_path(ftr))
+    ftrclass_aadt_multi_layers = t
+    del t
+
     #Create temp gdb to store all value classes
     # this is to work around issue with RepairGeometry not working
     # against in_memory datasets at 10.2
@@ -977,27 +987,10 @@ def main():
         ftrclass_speed_limit = repair_temp_data(out_temp_gdb, ftrclass_speed_limit, field_speed_limit_info)
 
         t = []
-        if len(ftrclass_aadt_multi_layers) > 0:
-            for ftr in ftrclass_aadt_multi_layers:
-                if hasattr(ftr, 'value'):
-                    t.append(repair_temp_data(out_temp_gdb, ftr.value, field_aadt_multi_layers_value))
-                else:
-                    t.append(repair_temp_data(out_temp_gdb, ftr, field_aadt_multi_layers_value))
-
+        for ftr in ftrclass_aadt_multi_layers:
+            t.append(repair_temp_data(out_temp_gdb, ftr, field_aadt_multi_layers_value))
         ftrclass_aadt_multi_layers = t
         del t
-    else:
-        t = []
-        if len(ftrclass_aadt_multi_layers) > 0:
-            for ftr in ftrclass_aadt_multi_layers:
-                if hasattr(ftr, 'value'):
-                    t.append(ftr.value)
-                else:
-                    t.append(ftr)
-
-        ftrclass_aadt_multi_layers = t
-        del t
-
 
     full_out_path = output_folder + os.sep + OUTPUT_GDB_NAME + os.sep + OUTPUT_SEGMENT_NAME
     if arcpy.Exists(full_out_path):
