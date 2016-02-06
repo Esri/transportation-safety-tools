@@ -1,4 +1,4 @@
-"""
+﻿"""
 -------------------------------------------------------------------------------
  | Copyright 2015 Esri
  |
@@ -357,13 +357,11 @@ def save_mxd(path, output_folder):
     """
     map_doc = arcpy.mapping.MapDocument(path)
     map_doc.findAndReplaceWorkspacePaths("", arcpy.env.workspace) 
-    mxd_filename = os.path.basename(path)
-    if mxd_filename.index("_Template") > 0:
-        mxd_filename.replace("_Template", "")
+    mxd_filename = os.path.basename(path).replace("_Template", "")
     output_path = "{0}//{1}_{2}.mxd".format(output_folder, mxd_filename[0:-4], time.strftime("%Y_%m_%d-%H_%M_%S"))
     arcpy.AddMessage("Saving: " + output_path)
     map_doc.saveACopy(output_path)
-    os.system(output_path)
+    arcpy.SetParameter(4, output_path)
 
 def update_and_save_map(output_folder, risk_map_template):
     """
