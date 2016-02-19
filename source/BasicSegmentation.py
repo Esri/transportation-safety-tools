@@ -1,4 +1,4 @@
-"""
+﻿"""
 -------------------------------------------------------------------------------
  | Copyright 2015 Esri
  |
@@ -169,8 +169,8 @@ def get_field_object(feature_class, field_name):
 def disable_m_value(feature_class):
     """ Disable M value of feature class """
     arcpy.env.outputMFlag = 'Disabled'
+    arcpy.env.outputZFlag = 'Disabled'
     fc_name = os.path.basename(str(feature_class)) + "_noM"
-    #TODO should I delete the class behind this also??
     return arcpy.FeatureClassToFeatureClass_conversion(feature_class, IN_MEMORY,
                                                        fc_name)
 
@@ -948,7 +948,7 @@ def main():
     field_aadt_multi_layers_value = arcpy.GetParameterAsText(17)
     output_folder = arcpy.GetParameterAsText(18)
     cluster_tolerance = arcpy.GetParameterAsText(19)
-
+    
 
     #If they pass in FeatureLayers...get the feature class path
     ftrclass_route = check_path(ftrclass_route)
@@ -958,6 +958,16 @@ def main():
     ftrclass_travel_lanes = check_path(ftrclass_travel_lanes)
     ftrclass_area_type = check_path(ftrclass_area_type)
     ftrclass_speed_limit = check_path(ftrclass_speed_limit)
+
+    t = []
+    if len(ftrclass_aadt_multi_layers) > 0:
+        for ftr in ftrclass_aadt_multi_layers:
+            if hasattr(ftr, 'value'):
+                t.append(check_path(ftr.value))
+            else:
+                t.append(check_path(ftr))
+    ftrclass_aadt_multi_layers = t
+    del t
 
     #Create temp gdb to store all value classes
     # this is to work around issue with RepairGeometry not working
@@ -977,27 +987,10 @@ def main():
         ftrclass_speed_limit = repair_temp_data(out_temp_gdb, ftrclass_speed_limit, field_speed_limit_info)
 
         t = []
-        if len(ftrclass_aadt_multi_layers) > 0:
-            for ftr in ftrclass_aadt_multi_layers:
-                if hasattr(ftr, 'value'):
-                    t.append(repair_temp_data(out_temp_gdb, ftr.value, field_aadt_multi_layers_value))
-                else:
-                    t.append(repair_temp_data(out_temp_gdb, ftr, field_aadt_multi_layers_value))
-
+        for ftr in ftrclass_aadt_multi_layers:
+            t.append(repair_temp_data(out_temp_gdb, ftr, field_aadt_multi_layers_value))
         ftrclass_aadt_multi_layers = t
         del t
-    else:
-        t = []
-        if len(ftrclass_aadt_multi_layers) > 0:
-            for ftr in ftrclass_aadt_multi_layers:
-                if hasattr(ftr, 'value'):
-                    t.append(ftr.value)
-                else:
-                    t.append(ftr)
-
-        ftrclass_aadt_multi_layers = t
-        del t
-
 
     full_out_path = output_folder + os.sep + OUTPUT_GDB_NAME + os.sep + OUTPUT_SEGMENT_NAME
     if arcpy.Exists(full_out_path):
@@ -1171,6 +1164,7 @@ def main():
                         check_list.append(field_route_name)
                         check_list.append(field_route_type)
                         r = routes + "FD"
+                        del check_list[check_list.index(shape_field_name)]
                         arcpy.Dissolve_management(routes, r, check_list, multi_part="SINGLE_PART", unsplit_lines="DISSOLVE_LINES")
                         arcpy.Delete_management(routes)
                         routes = r
@@ -1325,6 +1319,7 @@ def main():
         arcpy.SetProgressorPosition()
     except Exception, ex:
         print(ex)
+        arcpy.AddError(ex.args)
     finally:
         # ensure the in_memory workspace is cleared to free up memory
         arcpy.Delete_management(IN_MEMORY)
