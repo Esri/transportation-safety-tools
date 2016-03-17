@@ -189,7 +189,7 @@ def calculate_ratio_and_potential_crash_savings(layer, fields, crash_rate_for_ro
 
             current_roadway_type = row[roadway_type_index]
 
-            if crash_rate_for_road_type.keys().count(current_roadway_type) > 0:
+            if list(crash_rate_for_road_type.keys()).count(current_roadway_type) > 0:
                 avg_crash_rate = crash_rate_for_road_type[current_roadway_type]
 
                 if avg_crash_rate not in [None, "", ' ', 0]:
@@ -303,7 +303,7 @@ def assign_risk_levels(overall_length, fields, layer):
     crash_count_field_index = fields.index(CRASH_COUNT_FIELDNAME)
 
     risk_level = -1
-    for risk_value_field_name in RISK_FIELD_VALUE_FIELD_FIELDS.keys():
+    for risk_value_field_name in list(RISK_FIELD_VALUE_FIELD_FIELDS.keys()):
         risk_level += 1
         arcpy.AddMessage("Assigning {0} risk level values".format(risk_value_field_name))
         risk_level_field_index = fields.index(RISK_FIELD_VALUE_FIELD_FIELDS[risk_value_field_name])
@@ -351,18 +351,6 @@ def assign_risk_levels(overall_length, fields, layer):
                 update_cursor.updateRow(row)
                 previous_value = current_value
 
-def save_mxd(path, output_folder):
-    """
-    updates the datasoure of the layers in the mxd and saves a copy of the mxd
-    """
-    map_doc = arcpy.mapping.MapDocument(path)
-    map_doc.findAndReplaceWorkspacePaths("", arcpy.env.workspace) 
-    mxd_filename = os.path.basename(path).replace("_Template", "")
-    output_path = "{0}//{1}_{2}.mxd".format(output_folder, mxd_filename[0:-4], time.strftime("%Y_%m_%d-%H_%M_%S"))
-    arcpy.AddMessage("Saving: " + output_path)
-    map_doc.saveACopy(output_path)
-    arcpy.SetParameter(4, output_path)
-
 def update_and_save_map(output_folder, risk_map_template):
     """
     checks the file path to determine if the template mxd exists
@@ -378,7 +366,41 @@ def update_and_save_map(output_folder, risk_map_template):
     if risk_map_template not in ["", " ", None]:
         template_mxd = risk_map_template
         if os.path.isfile(template_mxd):
-            save_mxd(template_mxd, output_folder)
+            mxd_filename = os.path.basename(template_mxd).replace("_Template", "")
+            output_path = "{0}//{1}_{2}.mxd".format(output_folder, mxd_filename[0:-4], time.strftime("%Y_%m_%d-%H_%M_%S"))
+            prj = None
+            try:
+                import arcpy.mapping as mapping
+                try:
+                    prj = mapping.MapDocument(template_mxd)
+                    prj.findAndReplaceWorkspacePaths("", arcpy.env.workspace) 
+                except Exception as ex:
+                    arcpy.AddError(ex.args)
+                    sys.exit()
+            except ImportWarning:
+                import arcpy.mp as mapping
+                prj = mapping.ArcGISProject('CURRENT')
+                prj.importDocument(template_mxd)
+                # TODO how to make sure we get the one we imported? 
+                # will just grab the first one with one of our layers for now..maybe we should at least test if this one has
+                #  broken datasources
+                maps = prj.listMaps()
+                for map in maps:
+                    layers = map.listLayers()
+                    for layer in layers:
+                        if layer.name in ['Crash Density Risk Map', 'Crash Rate Risk Map', 'Crash Rate Ratio Risk Map', 'Potential Crash Savings Map']:
+                            layer_connection = layer.connectionProperties['connection_info']['database']
+                            prj.updateConnectionProperties(layer_connection, arcpy.env.workspace)
+                            break
+                    else:
+                        continue
+                    break
+            arcpy.AddMessage("Saving: " + output_path)
+            if hasattr(prj, 'saveACopy'):
+                prj.saveACopy(output_path)
+                arcpy.SetParameter(4, output_path)
+            else:
+                arcpy.AddError("Error in updating and saving the new map.")
         else:
             arcpy.AddWarning("Unable to locate the template mxd: " + template_mxd)
             arcpy.AddWarning("No Risk Maps will be produced.")
@@ -435,5 +457,5 @@ def main():
 if __name__ == '__main__':
     try:
         main()
-    except Exception, ex:
+    except Exception as ex:
         arcpy.AddError(ex.args)

@@ -183,7 +183,7 @@ def create_where_clause(field, route_types, lookup=None):
     if lookup:
         # reverse the dictinary key, value pair to find domain code
         # for selected values
-        lookup = dict(zip(lookup.values(), lookup.keys()))
+        lookup = dict(list(zip(list(lookup.values()), list(lookup.keys()))))
     for route_type in route_types:
         if len(where_clause) > 0:
             where_clause += ' OR '
@@ -248,7 +248,7 @@ def calculate_average(feature_class, existing_fields, new_field):
     #create dict with 0 based index for the years location in the fields collection
     years = [year(field) for field in fields]
     indexes = [n for n in range(len(years))]
-    field_order = dict(zip(indexes, years))
+    field_order = dict(list(zip(indexes, years)))
     fields.append(new_field)
     with arcpy.da.UpdateCursor(feature_class, fields) as cursor:
         for row in cursor:
@@ -391,7 +391,7 @@ def combine_attributes(fc_target, fc_identity, fc_identity_field_name,
             arcpy.DeleteField_management(baseline_routes, baseline_route_fields)
 
         if not arcpy.Exists(full_out_path):
-            if isinstance(baseline_routes, str) or isinstance(baseline_routes, unicode):
+            if isinstance(baseline_routes, str) or isinstance(baseline_routes, str):
                 name = str(baseline_routes)
             else:
                 name = baseline_routes[0]
@@ -407,11 +407,11 @@ def combine_attributes(fc_target, fc_identity, fc_identity_field_name,
         domain_lu = None
         field_type = None
 
-        for existing_field, new_field in field_dict.items():
+        for existing_field, new_field in list(field_dict.items()):
             if not len([field.name for field in arcpy.ListFields(full_out_path) if field.name == new_field]) == 1:
                 # get the field object of existing field in baseline feature class
                 name = ""
-                if isinstance(baseline_routes, str) or type(baseline_routes, unicode):
+                if isinstance(baseline_routes, str) or isinstance(baseline_routes, str):
                     name = str(baseline_routes)
                 else:
                     name = baseline_routes[0]
@@ -442,7 +442,7 @@ def identify_usrap_segment(feature_class, roadway_types, output_folder, field_ro
 
     add_message("   Identifying USRAP segments...")
     # field name for USRAP segments
-    fields = list(set([k for d in roadway_types for k in d.keys()]))
+    fields = list(set([k for d in roadway_types for k in list(d.keys())]))
     fields.append(USRAP_SEGMENT)
     fields.append(USRAP_AVG_AADT)
     fields.append(USRAP_SPEED_LIMIT)
@@ -476,7 +476,7 @@ def identify_usrap_segment(feature_class, roadway_types, output_folder, field_ro
                     break
 
                 # test a segment on roadway type to identify it as usrap segment
-                for field in roadway_type.keys():
+                for field in list(roadway_type.keys()):
                     if field != USRAP_ROADWAYTYPE:
                         try:
                             # check for access control
@@ -563,7 +563,7 @@ def identify_usrap_segment(feature_class, roadway_types, output_folder, field_ro
                 has_lanes = True
                 has_area_type = True
                 has_name = True
-                for field in errors.keys():
+                for field in list(errors.keys()):
                     if str(errors[field]) != 'True':
                         allTrue = False
                         if str(field) == USRAP_AVG_AADT:
@@ -766,7 +766,7 @@ def merge_segments(update_row, update_cursor, fields, feature_class, condition):
                 # delete the redundant records which are merged with others
                 where = ''
                 if len(OID_merged) > 0:
-                    merged_oids = map(str, OID_merged)
+                    merged_oids = list(map(str, OID_merged))
                     field_oid = str(arcpy.Describe(feature_class).OIDFieldName)
                     where = field_oid +' = ' + ' OR {0} = '.format(field_oid).join(merged_oids)
                     arcpy.SelectLayerByAttribute_management(feature_class,
@@ -811,11 +811,11 @@ def check_domain(fc, fc_info, class_message, main_message):
     field = get_field_object(fc, fc_info)
     dom_codes = get_domain_values(workspace, field.domain)
     #del workspace, field
-    if len(dom_codes.keys()) != len(class_message):
+    if len(list(dom_codes.keys())) != len(class_message):
         raise arcpy.ExecuteError(main_message.format(len(class_message)))
 
-    for message, desc in class_message.items():
-        if desc.lower() not in (des.lower() for des in dom_codes.values()):
+    for message, desc in list(class_message.items()):
+        if desc.lower() not in (des.lower() for des in list(dom_codes.values())):
             raise arcpy.ExecuteError("Description: '{0}' {1}".format(desc, message))
 
 def add_message(msg):
@@ -839,16 +839,16 @@ def check_key_fields(key_fields, aadt_layers, aadt_field):
 
     problem_fields = {}
     x = 0
-    for kl in key_fields.keys():
+    for kl in list(key_fields.keys()):
         key_layer_fields = []
-        for key_layer in key_fields.keys():
+        for key_layer in list(key_fields.keys()):
             if kl != key_layer:
                 for f in key_fields[key_layer]:
                     key_layer_fields.append(str(f))
         fields = [f.name for f in arcpy.ListFields(kl)]
         for field in key_layer_fields:
             if fields.count(field) > 0 and key_fields[kl][0] != field:
-                if problem_fields.keys().count(kl) > 0:
+                if list(problem_fields.keys()).count(kl) > 0:
                     if not problem_fields[kl].count(field) > 0:
                         problem_fields[kl].append(field)
                 else:
@@ -861,7 +861,7 @@ def combine_values(baseline_selected, value_set, cluster_tolerance, problem_fiel
     shape_field_name = arcpy.Describe(baseline_selected).shapeFieldName
     check_list = [shape_field_name]
     for values in value_set:
-        if isinstance(baseline_selected, str) or type(baseline_selected, unicode):
+        if isinstance(baseline_selected, str) or isinstance(baseline_selected, str):
             sp = baseline_selected
         else:
             sp = baseline_selected[0]
@@ -948,7 +948,6 @@ def main():
     field_aadt_multi_layers_value = arcpy.GetParameterAsText(17)
     output_folder = arcpy.GetParameterAsText(18)
     cluster_tolerance = arcpy.GetParameterAsText(19)
-    
 
     #If they pass in FeatureLayers...get the feature class path
     ftrclass_route = check_path(ftrclass_route)
@@ -1185,7 +1184,7 @@ def main():
 
                     max_val = int(arcpy.GetCount_management(routes)[0])
                     add_message('   {0} segments present after combining attributes'.format(max_val))
-                    add_message("   Merging features... this may take a while")
+                    add_message("   Merging features...")
                     # variables for progressor and message
                     stepper = 0
                     lower = 10
@@ -1215,13 +1214,13 @@ def main():
                                 stepper += 1
                             percent = round(int((stepper/float(max_val))*100))
                             if lower <= percent < 100:
-                                arcpy.AddMessage('     Merging completed {0}%'.format(lower))
+                                arcpy.AddMessage('     Merging {0}% complete.'.format(lower))
                                 lower += 10
                             arcpy.SetProgressorPosition(stepper)
-                    arcpy.AddMessage('     Merging completed {0}%'.format('100'))
+                    arcpy.AddMessage('     Merging {0}% complete'.format('100'))
                     merged_count = int(arcpy.GetCount_management(routes)[0])
                     diff = max_val - merged_count
-                    arcpy.AddMessage('   {0} are merged out of {1} segments'.format(diff,
+                    arcpy.AddMessage('   {0} merged out of {1} segments'.format(diff,
                                                                                  max_val))
                     arcpy.ResetProgressor()
                     msg = "   Assigning USRAP_SEGID to segments"
@@ -1317,7 +1316,7 @@ def main():
             arcpy.Delete_management(out_temp_gdb)
 
         arcpy.SetProgressorPosition()
-    except Exception, ex:
+    except Exception as ex:
         print(ex)
         arcpy.AddError(ex.args)
     finally:
@@ -1331,5 +1330,5 @@ def main():
 if __name__ == '__main__':
     try:
         main()
-    except Exception, ex:
+    except Exception as ex:
         arcpy.AddError(ex.args)
