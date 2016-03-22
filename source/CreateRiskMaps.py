@@ -367,30 +367,32 @@ def update_and_save_map(output_folder, risk_map_template):
         template_mxd = risk_map_template
         if os.path.isfile(template_mxd):
             mxd_filename = os.path.basename(template_mxd).replace("_Template", "")
-            output_path = "{0}//{1}_{2}.mxd".format(output_folder, mxd_filename[0:-4], time.strftime("%Y_%m_%d-%H_%M_%S"))
+            
             prj = None
             try:
                 import arcpy.mapping as mapping
                 try:
+                    output_path = "{0}//{1}_{2}.mxd".format(output_folder, mxd_filename[0:-4], time.strftime("%Y_%m_%d-%H_%M_%S"))
                     prj = mapping.MapDocument(template_mxd)
                     prj.findAndReplaceWorkspacePaths("", arcpy.env.workspace) 
                 except Exception as ex:
                     arcpy.AddError(ex.args)
                     sys.exit()
-            except ImportWarning:
+            except ImportError:
+                output_path = "{0}//{1}_{2}.aprx".format(output_folder, mxd_filename[0:-4], time.strftime("%Y_%m_%d-%H_%M_%S"))
+                expectedLayerNames = ['Crash Density', 'Crash Rate', 'Crash Rate Ratio', 'Potential Crash Savings']
                 import arcpy.mp as mapping
                 prj = mapping.ArcGISProject('CURRENT')
                 prj.importDocument(template_mxd)
-                # TODO how to make sure we get the one we imported? 
-                # will just grab the first one with one of our layers for now..maybe we should at least test if this one has
-                #  broken datasources
                 maps = prj.listMaps()
                 for map in maps:
-                    layers = map.listLayers()
+                    layers = map.listLayers()            
                     for layer in layers:
-                        if layer.name in ['Crash Density Risk Map', 'Crash Rate Risk Map', 'Crash Rate Ratio Risk Map', 'Potential Crash Savings Map']:
+                        if layer.name in expectedLayerNames and layer.isBroken:
                             layer_connection = layer.connectionProperties['connection_info']['database']
                             prj.updateConnectionProperties(layer_connection, arcpy.env.workspace)
+                            arcpy.AddMessage("Map: " + map.name + " was imported sucessfully.")
+                            arcpy.AddMessage("Please check under the Maps entry in the Project pane.")
                             break
                     else:
                         continue
