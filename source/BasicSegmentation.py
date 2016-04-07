@@ -809,6 +809,9 @@ def add_segids(feature_class, field_name):
 def check_domain(fc, fc_info, class_message, main_message):
     workspace = get_workspace(fc)
     field = get_field_object(fc, fc_info)
+    if field.domain == '':
+        raise arcpy.ExecuteError('Field {0} must have a domain. {1}'.format(field.name, main_message.format(len(class_message)))) 
+    
     dom_codes = get_domain_values(workspace, field.domain)
     #del workspace, field
     if len(list(dom_codes.keys())) != len(class_message):
@@ -1252,18 +1255,10 @@ def main():
                 with arcpy.da.SearchCursor(routes, route_fields) as ser_cur:
                     with arcpy.da.InsertCursor(full_out_path, out_fields) as in_cur:
                         for row in ser_cur:
-                            new_row = []
-                            used_indexes = []
+                            new_row = [None] * len(out_fields)
                             for field in route_fields:
                                 if out_fields.index(field) > -1:
-                                    used_indexes.append(out_fields.index(field))
-                                    new_row.insert(out_fields.index(field), row[route_fields.index(field)])
-                            if len(new_row) != len(out_fields):
-                                x = 0
-                                while x < len(out_fields):
-                                    if x not in used_indexes:
-                                        new_row.insert(x, None)
-                                    x += 1
+                                    new_row[out_fields.index(field)] = row[route_fields.index(field)]
                             in_cur.insertRow(new_row)
 
                 #THIS ONLY INSERTS THE FIRST CHARACTER FROM STRING FIELDS WITH PY 3
