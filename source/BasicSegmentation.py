@@ -1296,6 +1296,8 @@ def main():
 
         arcpy.AddSpatialIndex_management(full_out_path)
 
+        arcpy.SetParameterAsText(20, full_out_path)
+
         del ftrclass_route, ftrclass_county, ftrclass_access_control, ftrclass_median
         del ftrclass_travel_lanes, ftrclass_area_type, ftrclass_speed_limit
         del aadt_clipped, baseline_selected, baseline_values, c, check_list, 
