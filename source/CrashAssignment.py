@@ -422,7 +422,7 @@ def assign_values(input_segment_fc, input_crash_fc, crash_year_field, max_dist,
         return crash_years, aadt_years, usrap_count, out_gdb
 
 #===================== Merging =================================================#
-def check_criteria(sorted_features_layer, conditions, criterias, check_fields, segment_route_name_field, crash_fields, temp_seg):
+def check_criteria(sorted_features_layer, conditions, criterias, check_fields, segment_route_name_field, crash_fields, temp_segments):
     """
     This function is used for performing merging of the segments.
     It first merges the segments by relaxing speed limit and then by relaxing AADT.
@@ -440,6 +440,10 @@ def check_criteria(sorted_features_layer, conditions, criterias, check_fields, s
 
         #NEW FOR BY-COUNTY
         county_name_list = set([row.getValue(COUNTY_FIELD_NAME) for row in arcpy.SearchCursor(sorted_features_layer, fields=COUNTY_FIELD_NAME)])
+        arcpy.CopyFeatures_management(sorted_features_layer, temp_segments)
+        arcpy.MakeFeatureLayer_management(temp_segments, "tempSegLayer", "1=1")
+        arcpy.DeleteFeatures_management(temp_segments)
+        arcpy.Delete_management("tempSegLayer")
 
         # Check for number of crashes per segment < per_of_segments       
         if False in condition_checks and condition != "end_result":
@@ -455,10 +459,6 @@ def check_criteria(sorted_features_layer, conditions, criterias, check_fields, s
 
             # Check select and copy to mem the unique vals from COUNTY_FIELD_NAME
             iii=0
-            arcpy.CopyFeatures_management(sorted_features_layer, temp_seg)
-            arcpy.MakeFeatureLayer_management(temp_seg, "tempSegLayer", "1=1")
-            arcpy.DeleteFeatures_management(temp_seg)
-            arcpy.Delete_management("tempSegLayer")
 
             for county_name in county_name_list:
                 iii+=1
@@ -477,11 +477,11 @@ def check_criteria(sorted_features_layer, conditions, criterias, check_fields, s
                                                 "with_aadt", step_count, condition, segment_route_name_field,crash_fields, USRAP_WHERE)
                 
                 arcpy.SelectLayerByAttribute_management(in_mem_layer,"CLEAR_SELECTION")
-                arcpy.Append_management(in_mem_layer, temp_seg)
+                arcpy.Append_management(in_mem_layer, temp_segments)
 
             arcpy.SelectLayerByAttribute_management(sorted_features_layer, "NEW_SELECTION", "{0} <> 'YES'".format(USRAP_SEGMENT_FIELD_NAME))
 
-            arcpy.Append_management(sorted_features_layer, temp_seg)
+            arcpy.Append_management(sorted_features_layer, temp_segments)
             
             desc_fc = arcpy.Describe(sorted_features_layer)
             if hasattr(desc_fc, 'featureClass'):
@@ -491,7 +491,7 @@ def check_criteria(sorted_features_layer, conditions, criterias, check_fields, s
                     del sorted_features_layer
                 arcpy.Delete_management(desc_fc.featureClass.catalogPath)
             del desc_fc
-            sorted_features_layer = arcpy.MakeFeatureLayer_management(temp_seg, "sorted_features_layer")
+            sorted_features_layer = arcpy.MakeFeatureLayer_management(temp_segments, "sorted_features_layer")
             #check both conditions again
             x=0
             condition_checks = []
@@ -506,10 +506,10 @@ def check_criteria(sorted_features_layer, conditions, criterias, check_fields, s
                 add_message("Merging by relaxing AADT...")
                 add_message("-" * 80)
 
-                temp_seg2 = temp_seg + "2"
-                arcpy.CopyFeatures_management(sorted_features_layer, temp_seg2)
-                arcpy.MakeFeatureLayer_management(temp_seg2, "tempSegLayer2", "1 = 1")
-                arcpy.DeleteFeatures_management(temp_seg2)
+                temp_segments2 = temp_segments + "2"
+                arcpy.CopyFeatures_management(sorted_features_layer, temp_segments2)
+                arcpy.MakeFeatureLayer_management(temp_segments2, "tempSegLayer2", "1 = 1")
+                arcpy.DeleteFeatures_management(temp_segments2)
                 arcpy.Delete_management("tempSegLayer2")
 
                 for county_name in county_name_list:
@@ -526,11 +526,11 @@ def check_criteria(sorted_features_layer, conditions, criterias, check_fields, s
                     _ = union_segments(in_mem_layer, check_fields,
                                     "without_aadt", next_step_count, condition, segment_route_name_field,crash_fields, USRAP_WHERE)
                     arcpy.SelectLayerByAttribute_management(in_mem_layer,"CLEAR_SELECTION")
-                    arcpy.Append_management(in_mem_layer, temp_seg2)
+                    arcpy.Append_management(in_mem_layer, temp_segments2)
 
 
                 arcpy.SelectLayerByAttribute_management(sorted_features_layer, "NEW_SELECTION", "{0} <> 'YES'".format(USRAP_SEGMENT_FIELD_NAME))
-                arcpy.Append_management(sorted_features_layer, temp_seg2)
+                arcpy.Append_management(sorted_features_layer, temp_segments2)
 
                 desc_fc = arcpy.Describe(sorted_features_layer)
                 if hasattr(desc_fc, 'featureClass'):
@@ -541,7 +541,9 @@ def check_criteria(sorted_features_layer, conditions, criterias, check_fields, s
                     del sorted_features_layer
                 del desc_fc
 
-                sorted_features_layer = arcpy.MakeFeatureLayer_management(temp_seg2, "sorted_features_layer")
+                sorted_features_layer = arcpy.MakeFeatureLayer_management(temp_segments2, "sorted_features_layer")
+                arcpy.Delete_management(temp_segments)
+                temp_segments = temp_segments2
 
                 #check both conditions again
                 x=0
@@ -558,9 +560,10 @@ def check_criteria(sorted_features_layer, conditions, criterias, check_fields, s
             else:
                 add_message("Criteria met. Merging will not be performed further.")
         else:
+            arcpy.Append_management(sorted_features_layer, temp_segments)
             add_message("Criteria met. Merging will not be performed further.")
         add_message("-" * 80)
-        return temp_seg2
+        return temp_segments
     except Exception as ex:
         print(ex.args)
         arcpy.AddError("Error occurred while checking conditions..")
@@ -1260,7 +1263,7 @@ def main():
         full_out_path = output_folder + os.sep + OUTPUT_GDB_NAME + os.sep + SEGMENT_OUTPUT_NAME
         ts = check_criteria(sorted_features_layer, [min_avg_crashes, per_of_segments],
                        ["min average", "per segments"],
-                       check_fields, segment_route_name_field, crash_fields, full_out_path)
+                       check_fields, segment_route_name_field, crash_fields, full_out_path + "_temp")
 
         arcpy.Delete_management(sorted_path)
         del sorted_path
@@ -1287,10 +1290,10 @@ def main():
         add_message("-" * 80)
 
     except arcpy.ExecuteError:
-        arcpy.AddError("Error occured while Merging segments..")
+        arcpy.AddError("Error occurred while Merging segments..")
 
     except Exception as ex:
-        arcpy.AddError("Error occured while Merging segments..")
+        arcpy.AddError("Error occurred while Merging segments..")
         print(ex.args)
         pass
 
