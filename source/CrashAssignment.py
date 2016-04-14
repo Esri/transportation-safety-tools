@@ -695,8 +695,8 @@ def union_segments(sorted_features_layer, check_fields, aadt_check, step_count,
                     if row[-1] in ["", None]:
                         continue
 
-                    where2 = where + " AND {0} = '{1}' AND {2} = '{3}' AND {4} = '{5}'".format(check_fields[county_field_index], row[county_field_index], 
-                                                                                         check_fields[road_name_field_index], row[road_name_field_index],
+                    where2 = where + " AND {0} = '{1}' AND {2} = '{3}' AND {4} = '{5}'".format(check_fields[county_field_index], row[county_field_index].replace("'","''"), 
+                                                                                         check_fields[road_name_field_index], row[road_name_field_index].replace("'","''"),
                                                                                          check_fields[roadway_type_field_index], row[roadway_type_field_index])
 
                     arcpy.SelectLayerByAttribute_management(sorted_features_layer, "NEW_SELECTION", where2)
