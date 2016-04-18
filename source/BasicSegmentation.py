@@ -762,7 +762,6 @@ def merge_segments(update_row, update_cursor, fields, feature_class, condition):
                                 msg = "Merge failed for ObjectId {0} and {1}".format(\
                                         update_row[0], current[0])
                                 arcpy.AddWarning(msg)
-                                arcpy.AddWarning(re.message)
                 # delete the redundant records which are merged with others
                 where = ''
                 if len(OID_merged) > 0:
