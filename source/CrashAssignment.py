@@ -1273,12 +1273,12 @@ def main():
 
         #   Clear the selection from the layer and copy it as new feature class
         #   in output Geodatabase
-        sorted_features_layer = arcpy.MakeFeatureLayer_management(ts,"sorted_features_layer", "1=1")
-        arcpy.CopyFeatures_management(sorted_features_layer, full_out_path)
+        output_layer = arcpy.MakeFeatureLayer_management(ts,"output_layer", "1=1")
+        arcpy.CopyFeatures_management(output_layer, full_out_path)
         try:
-            if arcpy.Exists(sorted_features_layer):
-                arcpy.Delete_management(sorted_features_layer)
-                del sorted_features_layer
+            if arcpy.Exists(output_layer):
+                arcpy.Delete_management(output_layer)
+                del output_layer
             if arcpy.Exists(ts):
                 arcpy.Delete_management(ts)
             del ts
