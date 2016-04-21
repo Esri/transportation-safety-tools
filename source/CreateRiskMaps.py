@@ -15,7 +15,7 @@
  | limitations under the License.
  ------------------------------------------------------------------------------
  """
-import arcpy, os, sys, decimal, time
+import arcpy, os, sys, decimal, time, json, tempfile
 
 #existing fields expected from input segments
 USRAP_SEGMENT_FIELDNAME = "USRAP_SEGMENT"
@@ -58,6 +58,11 @@ CRASH_RATE_RATIO_RISK_CATEGORY_FIELDNAME = "CRASH_RATE_RATIO_RISK"
 CRASH_POTENTIAL_SAVINGS_RISK_CATEGORY_FIELDNAME = "POTENTIAL_CRASH_SAVINGS_RISK"
 RISK_FIELDS = [CRASH_DENSITY_RISK_CATEGORY_FIELDNAME, CRASH_RATE_RISK_CATEGORY_FIELDNAME, 
                CRASH_RATE_RATIO_RISK_CATEGORY_FIELDNAME, CRASH_POTENTIAL_SAVINGS_RISK_CATEGORY_FIELDNAME]
+
+#map and Layer file json
+LAYER_JSON = r'{"layers": ["CIMPATH=risk_map/crash_density_risk_map.xml"], "version": "1.0.0", "type": "CIMLayerDocument", "layerDefinitions": [{"showPopups": true, "displayCacheType": "Permanent", "selectionSymbol": {"symbol": {"type": "CIMLineSymbol", "symbolLayers": [{"enable": true, "color": {"values": [0, 255, 255, 100], "type": "CIMRGBColor"}, "lineStyle3D": "Strip", "joinStyle": "Round", "colorLocked": false, "width": 2, "miterLimit": 10, "capStyle": "Round", "type": "CIMSolidStroke"}]}, "type": "CIMSymbolReference", "symbolName": "Symbol_8"}, "autoGenerateFeatureTemplates": true, "renderer": {"type": "CIMUniqueValueRenderer", "defaultSymbol": {"symbol": {"type": "CIMLineSymbol", "symbolLayers": [{"enable": true, "color": {"values": [178, 178, 178, 100], "type": "CIMRGBColor"}, "lineStyle3D": "Strip", "joinStyle": "Round", "colorLocked": false, "width": 0.8, "miterLimit": 10, "capStyle": "Butt", "type": "CIMSolidStroke"}]}, "type": "CIMSymbolReference", "symbolName": "Symbol_6"}, "useDefaultSymbol": true, "groups": [{"classes": [{"symbol": {"symbol": {"type": "CIMLineSymbol", "symbolLayers": [{"enable": true, "color": {"values": [100, 100, 66, 100], "type": "CIMHSVColor"}, "lineStyle3D": "Strip", "joinStyle": "Round", "colorLocked": false, "width": 1.5, "miterLimit": 10, "capStyle": "Round", "type": "CIMSolidStroke"}]}, "type": "CIMSymbolReference", "symbolName": "Symbol_1"}, "editable": false, "patch": "Default", "visible": false, "values": [{"type": "CIMUniqueValue", "fieldValues": ["Lowest risk"]}], "label": "Lowest risk", "type": "CIMUniqueValueClass"}, {"symbol": {"symbol": {"type": "CIMLineSymbol", "symbolLayers": [{"enable": true, "color": {"values": [80, 100, 82, 100], "type": "CIMHSVColor"}, "lineStyle3D": "Strip", "joinStyle": "Round", "colorLocked": false, "width": 1.5, "miterLimit": 10, "capStyle": "Round", "type": "CIMSolidStroke"}]}, "type": "CIMSymbolReference", "symbolName": "Symbol_2"}, "editable": false, "patch": "Default", "visible": false, "values": [{"type": "CIMUniqueValue", "fieldValues": ["Medium-low risk"]}], "label": "Medium-low risk", "type": "CIMUniqueValueClass"}, {"symbol": {"symbol": {"type": "CIMLineSymbol", "symbolLayers": [{"enable": true, "color": {"values": [60, 100, 100, 100], "type": "CIMHSVColor"}, "lineStyle3D": "Strip", "joinStyle": "Round", "colorLocked": false, "width": 1.5, "miterLimit": 10, "capStyle": "Round", "type": "CIMSolidStroke"}]}, "type": "CIMSymbolReference", "symbolName": "Symbol_3"}, "editable": false, "patch": "Default", "visible": false, "values": [{"type": "CIMUniqueValue", "fieldValues": ["Medium risk"]}], "label": "Medium risk", "type": "CIMUniqueValueClass"}, {"symbol": {"symbol": {"type": "CIMLineSymbol", "symbolLayers": [{"enable": true, "color": {"values": [255, 0, 0, 100], "type": "CIMRGBColor"}, "lineStyle3D": "Strip", "joinStyle": "Round", "colorLocked": false, "width": 1.5, "miterLimit": 10, "capStyle": "Round", "type": "CIMSolidStroke"}]}, "type": "CIMSymbolReference", "symbolName": "Symbol_4"}, "editable": false, "patch": "Default", "visible": false, "values": [{"type": "CIMUniqueValue", "fieldValues": ["Medium-high risk"]}], "label": "Medium-high risk", "type": "CIMUniqueValueClass"}, {"symbol": {"symbol": {"type": "CIMLineSymbol", "symbolLayers": [{"enable": true, "color": {"values": [0, 0, 0, 100], "type": "CIMRGBColor"}, "lineStyle3D": "Strip", "joinStyle": "Round", "colorLocked": false, "width": 1.5, "miterLimit": 10, "capStyle": "Round", "type": "CIMSolidStroke"}]}, "type": "CIMSymbolReference", "symbolName": "Symbol_5"}, "editable": false, "patch": "Default", "visible": false, "values": [{"type": "CIMUniqueValue", "fieldValues": ["Highest risk"]}], "label": "Highest risk", "type": "CIMUniqueValueClass"}], "type": "CIMUniqueValueGroup", "heading": "CRASH_DENSITY_RISK"}], "fields": ["CRASH_DENSITY_RISK"], "defaultLabel": "Non-USRAP Segments", "colorRamp": {"maxS": 80, "maxAlpha": 100, "colorSpace": {"url": "Default RGB", "type": "CIMICCColorSpace"}, "maxV": 80, "maxH": 360, "minAlpha": 100, "minS": 60, "type": "CIMRandomHSVColorRamp", "minV": 60}}, "exclusionSet": {}, "selectable": true, "scaleSymbols": true, "htmlPopupFormat": {"htmlPresentationStyle": "TwoColumnTable", "htmlUseCodedDomainValues": true, "type": "CIMHtmlPopupFormat"}, "type": "CIMFeatureLayer", "isFlattened": true, "visibility": true, "featureTable": {"timeFields": {"type": "CIMTimeTableDefinition"}, "editable": true, "searchOrder": "esriSearchOrderSpatial", "timeDisplayDefinition": {"timeInterval": 0, "timeIntervalUnits": "esriTimeUnitsHours", "timeOffsetUnits": "esriTimeUnitsYears", "type": "CIMTimeDisplayDefinition"}, "timeDefinition": {"type": "CIMTimeDataDefinition"}, "type": "CIMFeatureTable", "studyAreaSpatialRel": "esriSpatialRelUndefined", "dataConnection": {"dataset": "SegmentOutput", "type": "CIMStandardDataConnection", "workspaceConnectionString": "DATABASE=..\\MapsandGeodatabase\\BasicSegmentation\\CrashAssignmentOutput.gdb", "datasetType": "esriDTFeatureClass", "workspaceFactory": "FileGDB"}}, "snappable": true, "showLegends": true, "name": "Crash Density Risk Map", "uRI": "CIMPATH=risk_map/crash_density_risk_map.xml", "maxDisplayCacheAge": 5, "htmlPopupEnabled": true, "sourceModifiedTime": {"type": "TimeInstant"}, "layerType": "Operational", "labelClasses": [{"maplexLabelPlacementProperties": {"multiPartOption": "OneLabelPerPart", "truncationMarkerCharacter": ".", "lineFeatureType": "General", "pointExternalZonePriorities": {"aboveRight": 1, "aboveLeft": 4, "belowLeft": 8, "centerRight": 3, "aboveCenter": 2, "centerLeft": 6, "belowCenter": 7, "type": "CIMMaplexExternalZonePriorities", "belowRight": 5}, "secondaryOffset": 100, "maximumLabelOverrunUnit": "Point", "labelPriority": -1, "enableConnection": true, "fontWidthReductionLimit": 90, "labelLargestPolygon": true, "fontHeightReductionLimit": 4, "fontWidthReductionStep": 5, "graticuleAlignmentType": "Straight", "truncationPreferredCharacters": "aeiou", "labelStackingProperties": {"stackAlignment": "ChooseBest", "maximumNumberOfLines": 3, "type": "CIMMaplexLabelStackingProperties", "maximumNumberOfCharsPerLine": 24, "minimumNumberOfCharsPerLine": 3}, "canPlaceLabelOutsidePolygon": true, "maximumLabelOverrun": 36, "pointPlacementMethod": "AroundPoint", "repetitionIntervalUnit": "Map", "connectionType": "Unambiguous", "constrainOffset": "NoConstraint", "fontHeightReductionStep": 0.5, "removeExtraWhiteSpace": true, "polygonFeatureType": "General", "offsetAlongLineProperties": {"useLineDirection": true, "distanceUnit": "Percentage", "type": "CIMMaplexOffsetAlongLineProperties", "placementMethod": "BestPositionAlongLine", "labelAnchorPoint": "CenterOfLabel"}, "polygonAnchorPointType": "GeometricCenter", "type": "CIMMaplexLabelPlacementProperties", "featureType": "Line", "labelBuffer": 15, "canStackLabel": true, "polygonInternalZones": {"type": "CIMMaplexInternalZonePriorities", "center": 1}, "polygonPlacementMethod": "CurvedInPolygon", "linePlacementMethod": "OffsetCurvedFromLine", "canRemoveOverlappingLabel": true, "featureWeight": 100, "canOverrunFeature": true, "rotationProperties": {"alignmentType": "Straight", "type": "CIMMaplexRotationProperties", "rotationType": "Arithmetic"}, "contourAlignmentType": "Page", "primaryOffset": 1, "minimumFeatureSizeUnit": "Map", "primaryOffsetUnit": "Point", "truncationMinimumLength": 1, "thinningDistanceUnit": "Map", "contourMaximumAngle": 90, "avoidPolygonHoles": true, "polygonExternalZones": {"aboveRight": 1, "aboveLeft": 4, "belowLeft": 8, "centerRight": 3, "aboveCenter": 2, "centerLeft": 6, "belowCenter": 7, "type": "CIMMaplexExternalZonePriorities", "belowRight": 5}, "polygonBoundaryWeight": 200, "contourLadderType": "Straight", "strategyPriorities": {"abbreviation": 5, "stacking": 1, "fontCompression": 3, "fontReduction": 4, "type": "CIMMaplexStrategyPriorities", "overrun": 2}}, "name": "Default", "featuresToLabel": "AllVisibleFeatures", "type": "CIMLabelClass", "visibility": true, "textSymbol": {"symbol": {"depth3D": 1, "billboardMode3D": "FaceNearPlane", "letterWidth": 100, "verticalGlyphOrientation": "Right", "fontFamilyName": "Arial", "fontEncoding": "Unicode", "flipAngle": 90, "blockProgression": "TTB", "haloSize": 1, "shadowColor": {"values": [0, 0, 0, 100], "type": "CIMRGBColor"}, "kerning": true, "verticalAlignment": "Bottom", "fontEffects": "Normal", "type": "CIMTextSymbol", "wordSpacing": 100, "symbol": {"type": "CIMPolygonSymbol", "symbolLayers": [{"colorLocked": false, "pattern": {"color": {"values": [0, 0, 0, 100], "type": "CIMRGBColor"}, "type": "CIMSolidPattern"}, "enable": true, "type": "CIMFill"}]}, "textCase": "Normal", "fontStyleName": "Regular", "ligatures": false, "horizontalAlignment": "Center", "drawSoftHyphen": true, "height": 8, "lineGapType": "ExtraLeading", "hinting": "Default", "textDirection": "LTR", "fontType": "Unspecified", "compatibilityMode": true, "extrapolateBaselines": true}, "type": "CIMSymbolReference", "symbolName": "Symbol_7"}, "priority": 2, "expressionEngine": "VBScript", "useCodedValue": true, "expression": "[ROUTE_NAME]", "standardLabelPlacementProperties": {"lineLabelPosition": {"inLine": true, "type": "CIMStandardLineLabelPosition", "parallel": true, "above": true}, "featureType": "Line", "pointPlacementPriorities": {"aboveRight": 1, "aboveLeft": 2, "belowLeft": 3, "centerRight": 2, "aboveCenter": 2, "centerLeft": 3, "belowCenter": 3, "type": "CIMStandardPointPlacementPriorities", "belowRight": 2}, "pointPlacementMethod": "AroundPoint", "numLabelsOption": "OneLabelPerName", "polygonPlacementMethod": "AlwaysHorizontal", "lineLabelPriorities": {"aboveEnd": 3, "belowAlong": 3, "belowEnd": 3, "centerAlong": 3, "centerStart": 3, "belowStart": 3, "centerEnd": 3, "aboveStart": 3, "aboveAlong": 3, "type": "CIMStandardLineLabelPriorities"}, "rotationType": "Arithmetic", "featureWeight": "None", "labelWeight": "High", "type": "CIMStandardLabelPlacementProperties"}}]}]}'
+MAP_JSON = r'{"mapDefinition": {"layers": ["CIMPATH=risk_map/topographic.xml"], "viewingMode": "2D", "name": "Risk Map", "generalPlacementProperties": {"placementQuality": "High", "type": "CIMMaplexGeneralPlacementProperties", "keyNumberGroups": [{"maximumNumberOfLines": 20, "name": "Default", "minimumNumberOfLines": 2, "numberResetType": "None", "horizontalAlignment": "Left", "type": "CIMMaplexKeyNumberGroup", "delimiterCharacter": "."}], "invertedLabelTolerance": 2, "unplacedLabelColor": {"values": [255, 0, 0, 100], "type": "CIMRGBColor"}}, "snappingProperties": {"snapRequestType": "SnapRequestType_GeometricAndVisualSnapping", "xYToleranceUnit": "SnapXYToleranceUnitPixel", "type": "CIMSnappingProperties", "xYTolerance": 10}, "uRI": "CIMPATH=risk_map/risk_map.xml", "spatialReference": {"wkid": 102100, "latestWkid": 3857}, "elevationSurfaces": [{"verticalExaggeration": 1, "name": "Ground", "color": {"values": [255, 255, 255, 100], "type": "CIMRGBColor"}, "elevationMode": "BaseGlobeSurface", "mapElevationID": "{B57250DE-34AA-4E2A-AA33-E617B9CB83AB}", "type": "CIMMapElevationSurface"}], "sourceModifiedTime": {"type": "TimeInstant"}, "mapType": "Map", "defaultExtent": {"xmin": -13580977.87677731, "ymin": 3780199.250079251, "ymax": 4278985.857377536, "xmax": -12801741.44122452, "spatialReference": {"wkid": 102100, "latestWkid": 3857}}, "illumination": {"sunAzimuth": 315, "type": "CIMIlluminationProperties", "illuminationSource": "AbsoluteSunPosition", "ambientLight": 75, "sunAltitude": 30, "sunPositionY": 0.61237243569579, "sunPositionX": -0.61237243569579, "sunPositionZ": 0.5}, "type": "CIMMap"}, "version": "1.0.0", "type": "CIMMapDocument", "layerDefinitions": [{"showLegends": true, "showPopups": true, "layerElevation": {"type": "CIMLayerElevationSurface", "mapElevationID": "{B57250DE-34AA-4E2A-AA33-E617B9CB83AB}"}, "description": "Topographic", "transparentColor": {"values": [0, 0, 0, 100], "type": "CIMRGBColor"}, "displayCacheType": "Permanent", "uRI": "CIMPATH=risk_map/topographic.xml", "visibility": true, "serviceConnection": {"description": "BaseMap", "objectName": "World_Topo_Map", "url": "http://services.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer", "serverConnection": {"url": "http://services.arcgisonline.com/ArcGIS/services", "type": "CIMInternetServerConnection", "hideUserProperty": true, "anonymous": true}, "type": "CIMAGSServiceConnection", "objectType": "MapServer"}, "sourceModifiedTime": {"type": "TimeInstant"}, "layerType": "BasemapBackground", "type": "CIMTiledServiceLayer", "backgroundColor": {"values": [0, 0, 0, 100], "type": "CIMRGBColor"}, "name": "Topographic"}]}'
+GROUP_LAYER_JSON = r'{"showLegends": true, "showPopups": true, "serviceLayerID": -1, "description": "Risk Map", "layers": [], "expanded": true, "displayCacheType": "Permanent", "uRI": "CIMPATH=risk_map/group_layer.xml", "visibility": true, "maxDisplayCacheAge": 5, "sourceModifiedTime": {"type": "TimeInstant"}, "layerType": "Operational", "type": "CIMGroupLayer", "name": "Risk"}'
 
 #lookup dict to map value field to risk category field
 RISK_FIELD_VALUE_FIELD_FIELDS = { CRASH_DENSITY_FIELDNAME: CRASH_DENSITY_RISK_CATEGORY_FIELDNAME,
@@ -332,8 +337,8 @@ def assign_risk_levels(overall_length, fields, layer):
                         #so we could properly handle a situation where a category is completely skipped
                         temp_next_threshold_value = risk_category_index + 1
                         temp_next_percentage_length = percentage_lengths[temp_next_threshold_value]
-                        if sum_length > temp_next_percentage_length:
-                            arcpy.AddWarning(RISK_LEVEL_CATEGORIES[risk_category_index + 1][0] + " level has no assigned values")
+                        #if sum_length > temp_next_percentage_length:
+                        #    arcpy.AddWarning(RISK_LEVEL_CATEGORIES[risk_category_index + 1][0] + " level has no assigned values")
                     else:
                         #don't increment for the final row otherwise increment to the next category
                         if risk_category_index + 1 < len(RISK_LEVEL_CATEGORIES):
@@ -351,63 +356,91 @@ def assign_risk_levels(overall_length, fields, layer):
                 update_cursor.updateRow(row)
                 previous_value = current_value
 
-def update_and_save_map(output_folder, risk_map_template):
+def update_and_save_map(segments, output_map):
     """
-    checks the file path to determine if the template mxd exists
+    Create a new map in the project or add new layers to existing map
     """
+    import arcpy.mp as mapping
+    prj = mapping.ArcGISProject('CURRENT')
+    desc = arcpy.Describe(segments)
 
-    #this is the template mxd that is distributed with the solution
-    template_mxd = "RiskMaps_Template.mxd"
+    if output_map is not None and output_map != '':
+        map = next((m for m in prj.listMaps() if m.name == output_map), None)
+        if map is not None:
+            layer_file = json.loads(LAYER_JSON)
+            group_layer = json.loads(GROUP_LAYER_JSON)
+            group_layer['name'] = "Risk Map {0}".format(time.strftime("%Y/%m/%d %H:%M:%S"))
+            layer_file['layerDefinitions'] = [group_layer]
+            layer_file['layers'] = [group_layer['uRI']]
+        
+            fields = RISK_FIELDS
+            for i in range(0, len(RISK_FIELDS)):
+                field =  fields[i]
+                layer = json.loads(LAYER_JSON)
+                layer_def = layer['layerDefinitions'][0]
+                layer_def['name'] = field.replace('_', ' ').title()
+                layer_def['uRI'] = "CIMPATH=risk_map/{0}.xml".format(field.lower())
+                layer_def['renderer']['fields'][0] = field
+                layer_def['renderer']['groups'][0]['heading'] = field
+                group_layer['layers'].append(layer_def['uRI'])
+                layer_file['layerDefinitions'].append(layer_def)
 
-    #if output folder is provided will save there otherwise the the parent folder for the gdb
-    if output_folder == "":
-        output_folder = os.path.dirname(arcpy.env.workspace)
+            with tempfile.NamedTemporaryFile(delete=False) as temp_lyrx:
+                temp_lyrx.write(json.dumps(layer_file).encode())
 
-    if risk_map_template not in ["", " ", None]:
-        template_mxd = risk_map_template
-        if os.path.isfile(template_mxd):
-            mxd_filename = os.path.basename(template_mxd).replace("_Template", "")
-            
-            prj = None
-            try:
-                import arcpy.mapping as mapping
-                try:
-                    output_path = "{0}//{1}_{2}.mxd".format(output_folder, mxd_filename[0:-4], time.strftime("%Y_%m_%d-%H_%M_%S"))
-                    prj = mapping.MapDocument(template_mxd)
-                    prj.findAndReplaceWorkspacePaths("", arcpy.env.workspace) 
-                except Exception as ex:
-                    arcpy.AddError(ex.args)
-                    sys.exit()
-            except ImportError:
-                output_path = "{0}//{1}_{2}.aprx".format(output_folder, mxd_filename[0:-4], time.strftime("%Y_%m_%d-%H_%M_%S"))
-                expectedLayerNames = ['Crash Density', 'Crash Rate', 'Crash Rate Ratio', 'Potential Crash Savings']
-                import arcpy.mp as mapping
-                prj = mapping.ArcGISProject('CURRENT')
-                prj.importDocument(template_mxd)
-                maps = prj.listMaps()
-                for map in maps:
-                    layers = map.listLayers()            
-                    for layer in layers:
-                        if layer.name in expectedLayerNames and layer.isBroken:
-                            layer_connection = layer.connectionProperties['connection_info']['database']
-                            prj.updateConnectionProperties(layer_connection, arcpy.env.workspace)
-                            arcpy.AddMessage("Map: " + map.name + " was imported sucessfully.")
-                            arcpy.AddMessage("Please check under the Maps entry in the Project pane.")
-                            break
-                    else:
-                        continue
-                    break
-            arcpy.AddMessage("Saving: " + output_path)
-            if hasattr(prj, 'saveACopy'):
-                prj.saveACopy(output_path)
-                arcpy.SetParameter(4, output_path)
-            else:
-                arcpy.AddError("Error in updating and saving the new map.")
+            lyrx_path = "{0}.lyrx".format(temp_lyrx.name)
+            os.rename(temp_lyrx.name, lyrx_path)
+            layer = arcpy.mp.LayerFile(lyrx_path)
+            os.unlink(lyrx_path)
+
+            for sublayer in layer.listLayers():
+                if sublayer.isBroken:
+                    layer_connection = sublayer.connectionProperties['connection_info']['database']
+                    sublayer.updateConnectionProperties(layer_connection, desc.path)
+
+            map.addLayer(layer)
+            return
         else:
-            arcpy.AddWarning("Unable to locate the template mxd: " + template_mxd)
-            arcpy.AddWarning("No Risk Maps will be produced.")
-    else:
-        arcpy.AddWarning("No Risk Maps will be produced.")
+            arcpy.AddWarning("Map: {0} does not exist in the Project. Creating a new map in the project".format(output_map))
+   
+    map = json.loads(MAP_JSON)
+    map_def = map['mapDefinition']
+    extent = desc.extent
+    extent = extent.projectAs(arcpy.SpatialReference(map_def['spatialReference']['wkid']))
+    map_def['defaultExtent'] = { 'xmin' : extent.XMin, 'ymin' : extent.YMin, 'xmax' : extent.XMax, 'ymax' : extent.YMax, 'spatialReference' : map_def['spatialReference'] }
+    map_name = "Risk Map {0}".format(time.strftime("%Y/%m/%d %H:%M:%S"))
+    map_def['name'] = map_name
+
+    fields = RISK_FIELDS
+    for i in range(0, len(RISK_FIELDS)):
+        field =  fields[i]
+        layer = json.loads(LAYER_JSON)
+        layer_def = layer['layerDefinitions'][0]
+        layer_def['name'] = field.replace('_', ' ').title()
+        layer_def['uRI'] = "CIMPATH=risk_map/{0}.xml".format(field.lower())
+        layer_def['renderer']['fields'][0] = field
+        layer_def['renderer']['groups'][0]['heading'] = field
+        map_def['layers'].insert(i, layer_def['uRI'])
+        map['layerDefinitions'].append(layer_def)
+
+    with tempfile.NamedTemporaryFile(delete=False) as temp_mapx:
+        temp_mapx.write(json.dumps(map).encode())
+
+    mapx_path = "{0}.mapx".format(temp_mapx.name)
+    os.rename(temp_mapx.name, mapx_path)
+    prj.importDocument(mapx_path)
+    os.unlink(mapx_path)
+
+    map = next((m for m in prj.listMaps() if m.name == map_name), None)
+    if map is None:
+        arcpy.AddError("Unable to create risk map.")       
+    for layer in map.listLayers():
+        if layer.isBroken:
+            layer_connection = layer.connectionProperties['connection_info']['database']
+            layer.updateConnectionProperties(layer_connection, desc.path)
+    
+    arcpy.AddMessage("Map: " + map.name + " was created succesfully.")
+    arcpy.AddMessage("Please check under the Maps entry in the Project pane.")
 
 def get_workspace(feature_class):
     """
@@ -427,8 +460,7 @@ def main():
     #inputs from the user
     segments = arcpy.GetParameterAsText(0)
     route_name_field = arcpy.GetParameterAsText(1)
-    output_folder = arcpy.GetParameterAsText(2)
-    risk_map_template = arcpy.GetParameterAsText(3)
+    output_map = arcpy.GetParameterAsText(2)
 
     segments = check_path(segments)
 
@@ -454,10 +486,11 @@ def main():
     create_summary_tables(layer, summary_table_values, route_name_field)
 
     #update the datasource for the layers in the map and save a new mxd
-    update_and_save_map(output_folder, risk_map_template)
+    update_and_save_map(segments, output_map)
 
 if __name__ == '__main__':
     try:
         main()
     except Exception as ex:
         arcpy.AddError(ex.args)
+
