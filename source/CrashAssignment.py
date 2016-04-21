@@ -750,7 +750,8 @@ def union_segments(sorted_features_layer, check_fields, aadt_check, step_count,
                                                     else:
                                                         row[-1] = search_row[-1]
                                                 except Exception as ex:
-                                                    arcpy.AddWarning(ex.args)
+                                                    msg = "Merge failed for ObjectId {0} and {1}".format(search_row[0], row[0])
+                                                    arcpy.AddWarning(msg)
                                                 pass
                                             
                                                 union_geoms.append(row[0])
@@ -788,7 +789,8 @@ def union_segments(sorted_features_layer, check_fields, aadt_check, step_count,
                                                 else:
                                                     row[-1] = search_row[-1]
                                             except Exception as ex:
-                                                arcpy.AddWarning(ex.args)
+                                                msg = "Merge failed for ObjectId {0} and {1}".format(search_row[0], row[0])
+                                                arcpy.AddWarning(msg)
                                             pass
                                             update_cursor.updateRow(row)
                                             delete_oids.append(search_row[0]) 
@@ -1275,6 +1277,7 @@ def main():
         #   in output Geodatabase
         output_layer = arcpy.MakeFeatureLayer_management(ts,"output_layer", "1=1")
         arcpy.CopyFeatures_management(output_layer, full_out_path)
+        arcpy.SetParameterAsText(10, full_out_path)
         try:
             if arcpy.Exists(output_layer):
                 arcpy.Delete_management(output_layer)
