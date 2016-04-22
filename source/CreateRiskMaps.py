@@ -467,28 +467,28 @@ def main():
     route_name_field = arcpy.GetParameterAsText(1)
     output_map = arcpy.GetParameterAsText(2)
 
-    #segments = check_path(segments)
+    segments = check_path(segments)
 
-    #add_fields(segments, CRASH_CALC_FIELDS, "DOUBLE", 6)
-    #add_fields(segments, RISK_FIELDS, "TEXT", None)
+    add_fields(segments, CRASH_CALC_FIELDS, "DOUBLE", 6)
+    add_fields(segments, RISK_FIELDS, "TEXT", None)
 
-    ###set the env
-    #arcpy.env.workspace = get_workspace(segments)
-    #arcpy.env.overwriteOutput = True
+    ##set the env
+    arcpy.env.workspace = get_workspace(segments)
+    arcpy.env.overwriteOutput = True
 
-    ##only process on usRAP segments
-    #where = "{0} = 'YES'".format(USRAP_SEGMENT_FIELDNAME)
-    #layer = arcpy.MakeFeatureLayer_management(segments, "RiskMapSegments", where)
+    #only process on usRAP segments
+    where = "{0} = 'YES'".format(USRAP_SEGMENT_FIELDNAME)
+    layer = arcpy.MakeFeatureLayer_management(segments, "RiskMapSegments", where)
 
-    ##handle the inital 4 calculations 
-    #summary_table_values, overall_length, fields = calculate_risk_values(layer)
+    #handle the inital 4 calculations 
+    summary_table_values, overall_length, fields = calculate_risk_values(layer)
 
-    ##assign risk levels after the values have been calculated 
-    ## and the overall length of the road network is known
-    #assign_risk_levels(overall_length, fields, layer)
+    #assign risk levels after the values have been calculated 
+    # and the overall length of the road network is known
+    assign_risk_levels(overall_length, fields, layer)
 
-    ##create and populate the summary tables
-    #create_summary_tables(layer, summary_table_values, route_name_field)
+    #create and populate the summary tables
+    create_summary_tables(layer, summary_table_values, route_name_field)
 
     #update the datasource for the layers in the map and save a new mxd
     update_and_save_map(segments, output_map)
