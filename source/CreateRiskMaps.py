@@ -357,66 +357,17 @@ def assign_risk_levels(overall_length, fields, layer):
                 update_cursor.updateRow(row)
                 previous_value = current_value
 
-def update_and_save_map(segments, output_map):
+def update_and_save_map(segments):
     """
-    Create a new map in the project or add new layers to existing map
+    Create a new map in the project with risk map layers added.
     """
     import arcpy.mp as mapping
     prj = mapping.ArcGISProject('CURRENT')
+
     desc = arcpy.Describe(segments)
-
-    if output_map is not None and output_map != '':
-        map = next((m for m in prj.listMaps() if m.name == output_map), None)
-        if map is not None:
-            layer_file = json.loads(LAYER_JSON)
-            group_layer = json.loads(GROUP_LAYER_JSON)
-            group_layer['name'] = "Risk Map {0}".format(time.strftime("%Y/%m/%d %H:%M:%S"))
-            layer_file['layerDefinitions'] = [group_layer]
-            layer_file['layers'] = [group_layer['uRI']]
-        
-            fields = RISK_FIELDS
-            for i in range(0, len(RISK_FIELDS)):
-                field =  fields[i]
-                layer = json.loads(LAYER_JSON)
-                layer_def = layer['layerDefinitions'][0]
-                layer_def['name'] = field.replace('_', ' ').title()
-                layer_def['uRI'] = "CIMPATH=risk_map/{0}.xml".format(field.lower())
-                renderer = json.loads(RENDERER)
-                renderer['fields'][0] = field
-                renderer['groups'][0]['heading'] = field
-                layer_def['renderer'] = renderer
-                group_layer['layers'].append(layer_def['uRI'])
-                layer_file['layerDefinitions'].append(layer_def)
-
-            with tempfile.NamedTemporaryFile(delete=False) as temp_lyrx:
-                temp_lyrx.write(json.dumps(layer_file).encode())
-
-            lyrx_path = "{0}.lyrx".format(temp_lyrx.name)
-            os.rename(temp_lyrx.name, lyrx_path)
-            layer = arcpy.mp.LayerFile(lyrx_path)
-            os.unlink(lyrx_path)
-
-            for sublayer in layer.listLayers():
-                if sublayer.isBroken:
-                    layer_connection = sublayer.connectionProperties['connection_info']['database']
-                    sublayer.updateConnectionProperties(layer_connection, desc.path)
-
-            map.addLayer(layer)
-            return
-        else:
-            arcpy.AddWarning("Map: {0} does not exist in the Project. Creating a new map in the project".format(output_map))
-   
-    map = json.loads(MAP_JSON)
-    map_def = map['mapDefinition']
-    extent = desc.extent
-    extent = extent.projectAs(arcpy.SpatialReference(map_def['spatialReference']['wkid']))
-    map_def['defaultExtent'] = { 'xmin' : extent.XMin, 'ymin' : extent.YMin, 'xmax' : extent.XMax, 'ymax' : extent.YMax, 'spatialReference' : map_def['spatialReference'] }
-    map_name = "Risk Map {0}".format(time.strftime("%Y/%m/%d %H:%M:%S"))
-    map_def['name'] = map_name
-
-    fields = RISK_FIELDS
+    layers = []
     for i in range(0, len(RISK_FIELDS)):
-        field =  fields[i]
+        field =  RISK_FIELDS[i]
         layer = json.loads(LAYER_JSON)
         layer_def = layer['layerDefinitions'][0]
         layer_def['name'] = field.replace('_', ' ').title()
@@ -425,8 +376,20 @@ def update_and_save_map(segments, output_map):
         renderer['fields'][0] = field
         renderer['groups'][0]['heading'] = field
         layer_def['renderer'] = renderer
-        map_def['layers'].insert(i, layer_def['uRI'])
-        map['layerDefinitions'].append(layer_def)
+        layers.append(layer_def)
+
+    map = json.loads(MAP_JSON)
+    map_def = map['mapDefinition']
+    extent = desc.extent
+    extent = extent.projectAs(arcpy.SpatialReference(map_def['spatialReference']['wkid']))
+    map_def['defaultExtent'] = { 'xmin' : extent.XMin, 'ymin' : extent.YMin, 'xmax' : extent.XMax, 'ymax' : extent.YMax, 'spatialReference' : map_def['spatialReference'] }
+    map_name = "Risk Map {0}".format(time.strftime("%Y/%m/%d %H:%M:%S"))
+    map_def['name'] = map_name
+    
+    for i in range(0, len(layers)):
+        lyr = layers[i]
+        map_def['layers'].insert(i, lyr['uRI'])
+        map['layerDefinitions'].append(lyr)
 
     with tempfile.NamedTemporaryFile(delete=False) as temp_mapx:
         temp_mapx.write(json.dumps(map).encode())
@@ -436,15 +399,15 @@ def update_and_save_map(segments, output_map):
     prj.importDocument(mapx_path)
     os.unlink(mapx_path)
 
-    map = next((m for m in prj.listMaps() if m.name == map_name), None)
-    if map is None:
+    new_map = next((m for m in prj.listMaps() if m.name == map_name), None)
+    if new_map is None:
         arcpy.AddError("Unable to create risk map.")       
-    for layer in map.listLayers():
+    for layer in new_map.listLayers():
         if layer.isBroken:
             layer_connection = layer.connectionProperties['connection_info']['database']
             layer.updateConnectionProperties(layer_connection, desc.path)
     
-    arcpy.AddMessage("Map: " + map.name + " was created succesfully.")
+    arcpy.AddMessage("Map: " + new_map.name + " was created successfully.")
     arcpy.AddMessage("Please check under the Maps entry in the Project pane.")
 
 def get_workspace(feature_class):
@@ -465,7 +428,6 @@ def main():
     #inputs from the user
     segments = arcpy.GetParameterAsText(0)
     route_name_field = arcpy.GetParameterAsText(1)
-    output_map = arcpy.GetParameterAsText(2)
 
     segments = check_path(segments)
 
@@ -491,7 +453,7 @@ def main():
     create_summary_tables(layer, summary_table_values, route_name_field)
 
     #update the datasource for the layers in the map and save a new mxd
-    update_and_save_map(segments, output_map)
+    update_and_save_map(segments)
 
 if __name__ == '__main__':
     try:
