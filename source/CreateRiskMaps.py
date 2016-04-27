@@ -19,6 +19,7 @@ import arcpy, os, sys, decimal, time, json, tempfile
 
 #existing fields expected from input segments
 USRAP_SEGMENT_FIELDNAME = "USRAP_SEGMENT"
+USRAP_SEGMENT_ID_FIELDNAME = "USRAP_SEGID"
 CRASH_COUNT_FIELDNAME = "TOTAL_CRASH"
 USRAP_AADT_YYYY = "USRAP_AADT_*"
 USRAP_AVG_AADT_FIELDNAME = "USRAP_AVG_AADT"
@@ -64,6 +65,12 @@ LAYER_JSON = r'{"layers": ["CIMPATH=risk_map/crash_density_risk_map.xml"], "vers
 RENDERER = r'{"type": "CIMUniqueValueRenderer", "defaultSymbol": {"symbol": {"type": "CIMLineSymbol", "symbolLayers": [{"enable": true, "color": {"values": [178, 178, 178, 100], "type": "CIMRGBColor"}, "lineStyle3D": "Strip", "miterLimit": 10, "width": 0.8, "joinStyle": "Round", "capStyle": "Butt", "type": "CIMSolidStroke"}]}, "type": "CIMSymbolReference", "symbolName": "Symbol_6"}, "useDefaultSymbol": true, "groups": [{"classes": [{"symbol": {"symbol": {"type": "CIMLineSymbol", "symbolLayers": [{"enable": true, "color": {"values": [100, 100, 66, 100], "type": "CIMHSVColor"}, "lineStyle3D": "Strip", "miterLimit": 10, "width": 1.5, "joinStyle": "Round", "capStyle": "Round", "type": "CIMSolidStroke"}]}, "type": "CIMSymbolReference", "symbolName": "Symbol_1"}, "patch": "Default", "visible": true, "values": [{"type": "CIMUniqueValue", "fieldValues": ["Lowest risk"]}], "label": "Lowest risk", "type": "CIMUniqueValueClass"}, {"symbol": {"symbol": {"type": "CIMLineSymbol", "symbolLayers": [{"enable": true, "color": {"values": [80, 100, 82, 100], "type": "CIMHSVColor"}, "lineStyle3D": "Strip", "miterLimit": 10, "width": 1.5, "joinStyle": "Round", "capStyle": "Round", "type": "CIMSolidStroke"}]}, "type": "CIMSymbolReference", "symbolName": "Symbol_2"}, "patch": "Default", "visible": true, "values": [{"type": "CIMUniqueValue", "fieldValues": ["Medium-low risk"]}], "label": "Medium-low risk", "type": "CIMUniqueValueClass"}, {"symbol": {"symbol": {"type": "CIMLineSymbol", "symbolLayers": [{"enable": true, "color": {"values": [60, 100, 100, 100], "type": "CIMHSVColor"}, "lineStyle3D": "Strip", "miterLimit": 10, "width": 1.5, "joinStyle": "Round", "capStyle": "Round", "type": "CIMSolidStroke"}]}, "type": "CIMSymbolReference", "symbolName": "Symbol_3"}, "patch": "Default", "visible": true, "values": [{"type": "CIMUniqueValue", "fieldValues": ["Medium risk"]}], "label": "Medium risk", "type": "CIMUniqueValueClass"}, {"symbol": {"symbol": {"type": "CIMLineSymbol", "symbolLayers": [{"enable": true, "color": {"values": [255, 0, 0, 100], "type": "CIMRGBColor"}, "lineStyle3D": "Strip", "miterLimit": 10, "width": 1.5, "joinStyle": "Round", "capStyle": "Round", "type": "CIMSolidStroke"}]}, "type": "CIMSymbolReference", "symbolName": "Symbol_4"}, "patch": "Default", "visible": true, "values": [{"type": "CIMUniqueValue", "fieldValues": ["Medium-high risk"]}], "label": "Medium-high risk", "type": "CIMUniqueValueClass"}, {"symbol": {"symbol": {"type": "CIMLineSymbol", "symbolLayers": [{"enable": true, "color": {"values": [0, 0, 0, 100], "type": "CIMRGBColor"}, "lineStyle3D": "Strip", "miterLimit": 10, "width": 1.5, "joinStyle": "Round", "capStyle": "Round", "type": "CIMSolidStroke"}]}, "type": "CIMSymbolReference", "symbolName": "Symbol_5"}, "patch": "Default", "visible": true, "values": [{"type": "CIMUniqueValue", "fieldValues": ["Highest risk"]}], "label": "Highest risk", "type": "CIMUniqueValueClass"}], "type": "CIMUniqueValueGroup", "heading": "CRASH_DENSITY_RISK"}], "fields": ["CRASH_DENSITY_RISK"], "defaultLabel": "Non-USRAP Segments", "colorRamp": {"maxS": 80, "maxAlpha": 100, "colorSpace": {"url": "Default RGB", "type": "CIMICCColorSpace"}, "maxV": 80, "maxH": 360, "minAlpha": 100, "minS": 60, "type": "CIMRandomHSVColorRamp", "minV": 60}}'
 MAP_JSON = r'{"mapDefinition": {"layers": ["CIMPATH=risk_map/topographic.xml"], "viewingMode": "2D", "name": "Risk Map", "generalPlacementProperties": {"placementQuality": "High", "type": "CIMMaplexGeneralPlacementProperties", "keyNumberGroups": [{"maximumNumberOfLines": 20, "name": "Default", "minimumNumberOfLines": 2, "numberResetType": "None", "horizontalAlignment": "Left", "type": "CIMMaplexKeyNumberGroup", "delimiterCharacter": "."}], "invertedLabelTolerance": 2, "unplacedLabelColor": {"values": [255, 0, 0, 100], "type": "CIMRGBColor"}}, "snappingProperties": {"snapRequestType": "SnapRequestType_GeometricAndVisualSnapping", "xYToleranceUnit": "SnapXYToleranceUnitPixel", "type": "CIMSnappingProperties", "xYTolerance": 10}, "uRI": "CIMPATH=risk_map/risk_map.xml", "spatialReference": {"wkid": 102100, "latestWkid": 3857}, "elevationSurfaces": [{"verticalExaggeration": 1, "name": "Ground", "color": {"values": [255, 255, 255, 100], "type": "CIMRGBColor"}, "elevationMode": "BaseGlobeSurface", "mapElevationID": "{B57250DE-34AA-4E2A-AA33-E617B9CB83AB}", "type": "CIMMapElevationSurface"}], "sourceModifiedTime": {"type": "TimeInstant"}, "mapType": "Map", "defaultExtent": {"xmin": -13580977.87677731, "ymin": 3780199.250079251, "ymax": 4278985.857377536, "xmax": -12801741.44122452, "spatialReference": {"wkid": 102100, "latestWkid": 3857}}, "illumination": {"sunAzimuth": 315, "type": "CIMIlluminationProperties", "illuminationSource": "AbsoluteSunPosition", "ambientLight": 75, "sunAltitude": 30, "sunPositionY": 0.61237243569579, "sunPositionX": -0.61237243569579, "sunPositionZ": 0.5}, "type": "CIMMap"}, "version": "1.0.0", "type": "CIMMapDocument", "layerDefinitions": [{"showLegends": true, "showPopups": true, "layerElevation": {"type": "CIMLayerElevationSurface", "mapElevationID": "{B57250DE-34AA-4E2A-AA33-E617B9CB83AB}"}, "description": "Topographic", "transparentColor": {"values": [0, 0, 0, 100], "type": "CIMRGBColor"}, "displayCacheType": "Permanent", "uRI": "CIMPATH=risk_map/topographic.xml", "visibility": true, "serviceConnection": {"description": "BaseMap", "objectName": "World_Topo_Map", "url": "http://services.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer", "serverConnection": {"url": "http://services.arcgisonline.com/ArcGIS/services", "type": "CIMInternetServerConnection", "hideUserProperty": true, "anonymous": true}, "type": "CIMAGSServiceConnection", "objectType": "MapServer"}, "sourceModifiedTime": {"type": "TimeInstant"}, "layerType": "BasemapBackground", "type": "CIMTiledServiceLayer", "backgroundColor": {"values": [0, 0, 0, 100], "type": "CIMRGBColor"}, "name": "Topographic"}]}'
 GROUP_LAYER_JSON = r'{"showLegends": true, "showPopups": true, "serviceLayerID": -1, "description": "Risk Map", "layers": [], "expanded": true, "displayCacheType": "Permanent", "uRI": "CIMPATH=risk_map/group_layer.xml", "visibility": true, "maxDisplayCacheAge": 5, "sourceModifiedTime": {"type": "TimeInstant"}, "layerType": "Operational", "type": "CIMGroupLayer", "name": "Risk"}'
+
+#popup html
+POPUP_DESCRIPTION_LOOKUP = { CRASH_DENSITY_FIELDNAME : '<span style=\"font-family: Calibri, sans-serif; font-size: 11pt;\"> {0}</span>'.format('crashes per mile of road'),
+               CRASH_RATE_FIELDNAME : '<span style=\"font-family: Calibri, sans-serif; font-size: 11pt;\"> {0}</span>'.format('crashes per 100 million veh-mi of travel'),
+               CRASH_RATE_RATIO_FIELDNAME : '<div><span style=\"font-family: Calibri, sans-serif; font-size: 11pt;\"><i>{0}</i></span></div>'.format('Risk expressed as the ratio of the crash rate for a particular analysis segment to the average crash rate for all segments of the same roadway type.'),
+               CRASH_POTENTIAL_SAVINGS_FIELDNAME : '<div><span style=\"font-family: Calibri, sans-serif; font-size: 11pt;\"><i>{0}</i></span></div>'.format('<i>Estimate of the number of crashes per mile that would be reduced if the crash rate for the road segment could be reduced to the average crash rate for similar road segments.</i>') }
 
 #lookup dict to map value field to risk category field
 RISK_FIELD_VALUE_FIELD_FIELDS = { CRASH_DENSITY_FIELDNAME: CRASH_DENSITY_RISK_CATEGORY_FIELDNAME,
@@ -357,7 +364,18 @@ def assign_risk_levels(overall_length, fields, layer):
                 update_cursor.updateRow(row)
                 previous_value = current_value
 
-def update_and_save_map(segments):
+def get_popup_html(calc_field, aadt_fields):
+    html = '<b>{0}:</b> {{{1}}}{2}'.format(calc_field.replace('_', ' ').title(), calc_field, POPUP_DESCRIPTION_LOOKUP[calc_field])
+    html += '<div><span style=\"font-family: Calibri, sans-serif; font-size: 11pt;\"><br /></span></div><div><span style=\"font-family: Calibri, sans-serif; font-size: 11pt;\"><b>Annual Average Daily Traffic Counts</b></span></div>'
+    
+    for aadt in aadt_fields:
+        name = aadt.name
+        html += '<div><span style=\"font-family: Calibri, sans-serif; font-size: 11pt;\">    {0}: </span>{{{1}}}</div><div>'.format(name[-4:], name)
+
+    html += '<div><br /></div><div><b>Assigned Crash Count:</b> {{{0}}}</div><div><br /></div><div><b>USRAP Roadway Type:</b> {{{1}}}</div></div>'.format(CRASH_COUNT_FIELDNAME, USRAP_ROADWAY_TYPE_FIELDNAME)
+    return html
+
+def update_and_save_map(segments, route_name_field):
     """
     Create a new map in the project with risk map layers added.
     """
@@ -365,9 +383,11 @@ def update_and_save_map(segments):
     prj = mapping.ArcGISProject('CURRENT')
 
     desc = arcpy.Describe(segments)
+    aadt_fields = arcpy.ListFields(segments, USRAP_AADT_YYYY)
+    
     layers = []
-    for i in range(0, len(RISK_FIELDS)):
-        field =  RISK_FIELDS[i]
+    for i in range(0, len(CRASH_CALC_FIELDS)):
+        field =  RISK_FIELD_VALUE_FIELD_FIELDS[CRASH_CALC_FIELDS[i]]
         layer = json.loads(LAYER_JSON)
         layer_def = layer['layerDefinitions'][0]
         layer_def['name'] = field.replace('_', ' ').title()
@@ -376,6 +396,9 @@ def update_and_save_map(segments):
         renderer['fields'][0] = field
         renderer['groups'][0]['heading'] = field
         layer_def['renderer'] = renderer
+        popup_info = {'type' : 'CIMPopupInfo', 'title' : '{{{0}}} (Segment ID: {{{1}}})'.format(route_name_field, USRAP_SEGMENT_ID_FIELDNAME), 'mediaInfos': []}
+        popup_info['mediaInfos'].append({'type' : 'CIMTextMediaInfo', 'row' : 1, 'column' : 1, 'text' : get_popup_html(CRASH_CALC_FIELDS[i], aadt_fields)})    
+        layer_def['popupInfo'] = popup_info
         layers.append(layer_def)
 
     map = json.loads(MAP_JSON)
@@ -383,7 +406,7 @@ def update_and_save_map(segments):
     extent = desc.extent
     extent = extent.projectAs(arcpy.SpatialReference(map_def['spatialReference']['wkid']))
     map_def['defaultExtent'] = { 'xmin' : extent.XMin, 'ymin' : extent.YMin, 'xmax' : extent.XMax, 'ymax' : extent.YMax, 'spatialReference' : map_def['spatialReference'] }
-    map_name = "Risk Map {0}".format(time.strftime("%Y/%m/%d %H:%M:%S"))
+    map_name = "Risk Map {0}".format(time.strftime("%Y-%m-%d %H %M %S"))
     map_def['name'] = map_name
     
     for i in range(0, len(layers)):
@@ -453,7 +476,7 @@ def main():
     create_summary_tables(layer, summary_table_values, route_name_field)
 
     #update the datasource for the layers in the map and save a new mxd
-    update_and_save_map(segments)
+    update_and_save_map(segments, route_name_field)
 
 if __name__ == '__main__':
     try:
