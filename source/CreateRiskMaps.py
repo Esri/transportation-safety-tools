@@ -128,7 +128,7 @@ def calculate_density_and_rate(layer, fields, number_of_years_in_study):
         for row in update_cursor: 
             # Crash Density = (# of Crashes)/(Length of Segment)
             num_crashes = float(row[crash_count_index])
-            length = float(row[-1])
+            length = float(row[-1].getLength('GEODESIC', 'MILES'))
             crash_density = num_crashes / length
             row[fields.index(CRASH_DENSITY_FIELDNAME)] = round(decimal.Decimal(crash_density), 5)
 
@@ -172,7 +172,6 @@ def calculate_density_and_rate(layer, fields, number_of_years_in_study):
 
             #increment the counter and summerization values
             num_segments += 1
-            length = float(row[-1])
             sum_length += length
             sum_avg_aadt += float(row[avg_aadt_index])
             sum_crashes += float(row[crash_count_index])
@@ -234,7 +233,7 @@ def calculate_risk_values(layer):
     fields = [CRASH_DENSITY_FIELDNAME, CRASH_RATE_FIELDNAME, 
               CRASH_COUNT_FIELDNAME, USRAP_AVG_AADT_FIELDNAME, 
               CRASH_RATE_RATIO_FIELDNAME, USRAP_ROADWAY_TYPE_FIELDNAME,
-              CRASH_POTENTIAL_SAVINGS_FIELDNAME, "SHAPE@LENGTH" ]
+              CRASH_POTENTIAL_SAVINGS_FIELDNAME, "SHAPE@" ]
 
     #summary_table_values: data for final summary table see pg. 22 whitepaper
     #summary_table_values: {key:value}
@@ -330,7 +329,7 @@ def assign_risk_levels(overall_length, fields, layer):
         # they should represent the percentage breakpoints and text descriptions respectively 
         with arcpy.da.UpdateCursor(layer, fields, sql_clause=(None, 'ORDER BY ' + risk_value_field_name + " ASC")) as update_cursor:           
             for row in update_cursor: 
-                length = float(row[-1])
+                length = float(row[-1].getLength('GEODESIC', 'MILES'))
                 sum_length += length
                 current_value = row[risk_value_field_index]
                 if previous_value == -9999:
