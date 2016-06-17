@@ -21,7 +21,7 @@ Toolset Include the following:
 
 * For editing and customizing the scripts - Notepad or a Python Editor
 * Basic understanding of GeoProcessing with ArcGIS
-* ArcGIS Desktop 10.2
+* ArcGIS Pro 1.2
 
 ## Resources
 
