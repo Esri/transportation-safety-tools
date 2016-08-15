@@ -463,8 +463,8 @@ def check_criteria(sorted_features_layer, conditions, criterias, check_fields, s
             for county_name in county_name_list:
                 iii+=1
                 add_message("Merging segments in " + str(county_name))
-                w = USRAP_WHERE + " AND " + COUNTY_FIELD_NAME + " = '" + str(county_name) + "'"
-                arcpy.SelectLayerByAttribute_management(sorted_features_layer, "NEW_SELECTION", w)
+                ww = USRAP_WHERE + " AND " + COUNTY_FIELD_NAME + " = '" + str(county_name.replace("'", "''")) + "'"
+                arcpy.SelectLayerByAttribute_management(sorted_features_layer, "NEW_SELECTION", ww)
                 in_mem_class = r"in_memory\c" + str(iii)
                 in_mem_layer = "fl" + str(iii)
                 arcpy.CopyFeatures_management(sorted_features_layer, in_mem_class)
@@ -516,7 +516,7 @@ def check_criteria(sorted_features_layer, conditions, criterias, check_fields, s
                     iii+=1
                     add_message("Merging segments in " + str(county_name))
 
-                    w= USRAP_WHERE + " AND " + COUNTY_FIELD_NAME + " = '" + str(county_name) + "'"
+                    w = USRAP_WHERE + " AND " + COUNTY_FIELD_NAME + " = '" + str(county_name.replace("'", "''")) + "'"
                     arcpy.SelectLayerByAttribute_management(sorted_features_layer, "NEW_SELECTION", w)
                     in_mem_class = r"in_memory\c" + str(iii)
                     arcpy.CopyFeatures_management(sorted_features_layer, in_mem_class)
