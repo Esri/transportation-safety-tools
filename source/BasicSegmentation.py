@@ -793,7 +793,7 @@ def add_segids(feature_class, field_name):
         arcpy.AddField_management(feature_class, field_name, 'LONG',
                                   field_alias=field_name)
         segment_id = USRAP_SEGID_START_FROM
-        with arcpy.da.UpdateCursor(feature_class, [field_name]) as update_cur:
+        with arcpy.da.UpdateCursor(feature_class, [field_name], where) as update_cur:
             for row in update_cur:
                 row[0] = segment_id
                 segment_id += 1
@@ -1277,10 +1277,8 @@ def main():
         where = "{0} = 'YES'".format(USRAP_SEGMENT)
         l = arcpy.MakeFeatureLayer_management(full_out_path, "FINAL_OUTPUT_SEGMENTS")
         arcpy.SelectLayerByAttribute_management(str(l[0]), 'CLEAR_SELECTION')
-        arcpy.SelectLayerByAttribute_management(str(l[0]), "NEW_SELECTION", where)
-
         segment_id = USRAP_SEGID_START_FROM
-        with arcpy.da.UpdateCursor(str(l[0]), [USRAP_SEGID]) as update_cur:
+        with arcpy.da.UpdateCursor(str(l[0]), [USRAP_SEGID], where) as update_cur:
             for row in update_cur:
                 row[0] = segment_id
                 segment_id += 1
