@@ -21,11 +21,16 @@ Toolset Include the following:
 
 * For editing and customizing the scripts - Notepad or a Python Editor
 * Basic understanding of GeoProcessing with ArcGIS
-* ArcGIS Pro 1.2
+* ArcGIS Pro 1.3.1
 
 ## Resources
 
+For help, visit [ArcGIS for Local Government's](http://links.esri.com/localgovernment/help/CrashAnalysis) or [ArcGIS for State Government's](http://links.esri.com/stategovernment/help/CrashAnalysis) documentation for Crash Analysis.
 
+Learn more about Esri's ArcGIS for [Local Government](http://solutions.arcgis.com/local-government/) and [State Government](http://solutions.arcgis.com/state-government/) maps and apps.
+
+* Show me a [list] (http://esri.github.io/#Local-Government) of other Local Government GitHub repositories.
+* Show me a [list] (http://esri.github.io/#State-Government) of other State Government GitHub repositories.
 
 
 ## Issues
@@ -55,7 +60,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 A copy of the license is available in the repository's
-[LICENSE.txt](https://github.com/Esri/transportation-safety-tools/blob/master/License.txt) file.
+[LICENSE.txt](https://github.com/Esri/transportation-safety-tools/blob/master/LICENSE.txt) file.
 
 [](Esri Tags: ArcGISSolutions State-Government State Government Transportation DOT)
 [](Esri Language: Python)
