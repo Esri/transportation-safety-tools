@@ -61,6 +61,3 @@ limitations under the License.
 
 A copy of the license is available in the repository's
 [LICENSE.txt](https://github.com/Esri/transportation-safety-tools/blob/master/LICENSE.txt) file.
-
-[](Esri Tags: ArcGISSolutions State-Government State Government Transportation DOT)
-[](Esri Language: Python)
