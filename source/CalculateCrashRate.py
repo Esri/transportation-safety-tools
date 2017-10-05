@@ -216,7 +216,6 @@ def main():
         lyrx_path = "{0}.lyrx".format(temp_lyrx.name)
         os.rename(temp_lyrx.name, lyrx_path)
         params[7].symbology = lyrx_path
-        arcpy.AddMessage(lyrx_path)
         
     finally:
         for dataset in scratch_datasets:
