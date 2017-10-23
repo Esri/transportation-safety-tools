@@ -1,2 +1,2 @@
-ArcGIS Solutions
+ArcGIS Solutions - <month year> Release
 Pulled from GitHub
