@@ -1289,6 +1289,7 @@ def main():
 
         arcpy.RepairGeometry_management(full_out_path)
 
+        check_list.append(shape_field_name)
         arcpy.DeleteIdentical_management(full_out_path, check_list)
 
         arcpy.AddSpatialIndex_management(full_out_path)
